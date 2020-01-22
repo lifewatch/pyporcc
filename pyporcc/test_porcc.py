@@ -29,7 +29,6 @@ if __name__ == "__main__":
     """
     Start a PorCC study and apply the classifier to all the sound files 
     """
-    write('data/cosentino/standard_click.wav', fs_data, np.array(click_model))
     # porcc_al = porcc.PorCC(load_type='custom', hq_mod=hq_mod, lq_mod=lq_mod, hq_params=hq_params, lq_params=lq_params, fs=fs_data, click_model_path=click_model_path)
     # porcc_al.test_classification_vs_matlab(models.Test)
 

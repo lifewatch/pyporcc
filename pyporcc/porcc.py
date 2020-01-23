@@ -12,6 +12,7 @@ import statsmodels.api as sm
 from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 import pickle
+import joblib
 
 import sound_click
 
@@ -24,22 +25,31 @@ class ClickModel:
         """
         self.ind_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
         self.dep_vars = ['P']
-        self.click_model = sf.read(click_model)
-        self.fs = fs
+        fs_model, self.click_model = sio.wavfile.read(click_model_path)
+        if fs_model != fs: 
+            raise Exception('This click is not recorded at the same frequency than the classified data!')
+        else:
+            self.fs = fs
         self.train_hq_df = train_hq_df
         self.train_lq_df = train_lq_df
         self.test_df = test_df
+
+        # Model definition, initialized to None until calculated 
+        self.hq_params = None
+        self.hq_mod = None
+        self.lq_params = None
+        self.lq_mod = None
 
 
     def pick_df(self, name):
         """
         Pick the right df
         """
-        if name == 'HQ':
+        if name == 'hq':
             df = self.train_hq_df
-        elif name == 'LQ':
+        elif name == 'lq':
             df = self.train_lq_df
-        elif name == 'Test':
+        elif name == 'test':
             df = self.test_df 
         else:
             raise Exception('This is not a valid Data Frame name')
@@ -59,12 +69,20 @@ class ClickModel:
         # Select the appropiate columns combination according to AIC
         models = models[models[:,-1].argsort()]
         comb = models[0][0]
+        print('The winning combination for %s is %s' % (name, comb))
         y = df['P']
         X = df[comb]
 
         # Create the logit model
         logreg = LogisticRegression()
         logreg.fit(X, y)
+
+        if name == 'hq':
+            self.hq_mod = logreg
+            self.hq_params = comb
+        else: 
+            self.lq_mod = logreg
+            self.lq_params = comb
 
         return comb, logreg
 
@@ -82,17 +100,14 @@ class ClickModel:
         for i in np.arange(1, len(self.ind_vars)+1):
             var_combinations = itertools.combinations(self.ind_vars, i)
             for comb in var_combinations:
-                print(comb)
+                # print(comb)
                 # Regression model
                 y = df['P']
                 X = df[list(comb)]
                 logit_model = sm.genmod.GLM(endog=y, exog=X, family=sm.families.family.Binomial())
                 reg = logit_model.fit()
-                
-                # reg = linear_model.LogisticRegression(max_iter=1000)
-                # reg.fit(df[list(comb)], df['P'])
-                # models.append([comb, reg, reg.score(df[list(comb)], df['P'])])
-                models.append([list(comb), reg, reg.aic])
+                if not np.isnan(reg.aic):
+                    models.append([list(comb), reg, reg.aic])
 
         return np.array(models)
 
@@ -127,23 +142,43 @@ class ClickModel:
 
         return confusion_matrix
 
-
-def test_click_calculation(self, save=None):
-    """
-    Test the calculation of the click parameters obtained with python compared to the ones obtained in the paper (on the Test DB)
-    """
-    df_test = self.pick_df('Test')
-
-    df_clicks = calculate_clicks_params(df_test)
-    df = df_clicks.join(df_test, lsuffix='_mat', rsuffix='_py')
-    if save:
-        df.to_csv('data/calculated_clicks.csv')
-
-    # Compare each field
-    error = self.Test[self.ind_vars] - df_clicks[self.ind_vars]
     
-    return error, df
+    def save(self, path, extension):
+        """
+        Save the current models in a file. Can be chosen to save it as pickle or joblib
+        """
+        if extension == 'pickle':
+            pickle.dump(self, open(path, 'wb'))
+        elif extension == 'joblib': 
+            joblib.dump(self, path)
+        else:
+            raise Exception('This extension is unknown!')
 
+
+    def calculate_clicks_params(self, df_name, save=False):
+        """
+        Add to the df the click parameters calculated by the Click Class
+        """
+        df = self.pick_df(df_name)
+        df_clicks = pd.DataFrame()
+
+        # Calculate all the independent variables and append them to the df
+        for var in self.ind_vars:
+            df_clicks[var] = 0.00
+
+        for idx in df.index:
+            signal = df.loc[idx, 'wave'][:,0]
+            click = sound_click.Click(signal, self.fs, df.loc[idx, 'datetime'], verbose=False)
+            x_coeff = np.correlate(click.sound_block, self.click_model)
+            xc = x_coeff.max()
+            # BW =  powerbw(click, Fs)/1000
+            df_clicks.loc[idx, self.ind_vars] = [click.Q, click.duration, click.ratio, xc, click.cf, click.bw]
+        
+        df_joint = df.join(df_clicks, lsuffix='_mat', rsuffix='')
+        if save:
+            df_joint.to_pickle('pyporcc/data/clicks_%s.pkl' % (df_name))
+
+        return df_joint
 
 
 class PorCC:
@@ -197,24 +232,24 @@ class PorCC:
         """
         Classify one row according to the params [PF, CF, Q, XC, duration, ratio, BW]
         """
-        if (X['PF'] > self.lowcutfreq) and (X['PF'] < self.highcutfreq) and (X['CF'] > self.lowcutfreq) and (X['CF'] < self.highcutfreq) and (X['Q'] > 4):
+        if (X['CF'] > self.lowcutfreq) and (X['CF'] < self.highcutfreq) and (X['Q'] > 4):
             # Evaluate the model on the given x
-            prob_hq = self.hq_mod.predict(X[self.hq_params])
+            prob_hq = self.hq_mod.predict_proba(X[self.hq_params].values.reshape(1,-1))[0][1]
 
             # Assign clip to a category
             if prob_hq >= self.th1:
                 # HQ click
-                porps = 0  
+                porps = 1  
             else:
-                prob_lq = self.lq_mod.predict(X[self.lq_params])
+                prob_lq = self.lq_mod.predict_proba(X[self.lq_params].values.reshape(1,-1))[0][1]
                 if prob_lq > self.th2:
                     # LQ click
-                    porps = 1  
+                    porps = 2  
                 else:
                     # HF Noise
-                    porps = 2  
+                    porps = 3  
         else:
-            porps = 2
+            porps = 3
 
         return porps        
 
@@ -225,15 +260,15 @@ class PorCC:
         """
         df['pyPorCC'] = 0
         # Evaluate the model on the given x
-        df['ProbHQ'] = self.hq_mod.predict_proba(df[self.hq_params])[:, 1]
-        df['ProbLQ'] = self.lq_mod.predict_proba(df[self.lq_params])[:, 1]
+        df['prob_hq'] = self.hq_mod.predict_proba(df[self.hq_params])[:, 1]
+        df['prob_lq'] = self.lq_mod.predict_proba(df[self.lq_params])[:, 1]
 
         # Decide
         loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
-        df.loc[~loc_idx, 'pyPorCC'] = 2                                                                   # N Clicks
-        df.loc[loc_idx & (df['ProbHQ'] > self.th1), 'pyPorCC'] = 0                                         # HQ Clicks
-        df.loc[loc_idx & (df['ProbHQ'] < self.th1) & (df['ProbLQ'] > self.th2), 'pyPorCC'] = 1             # LQ Clicks
-        df.loc[loc_idx & (df['ProbHQ'] < self.th1) & (df['ProbLQ'] <= self.th2), 'pyPorCC'] = 2            # N Clicks
+        df.loc[~loc_idx, 'pyPorCC'] = 3                                                                      # N Clicks
+        df.loc[loc_idx & (df['prob_hq'] > self.th1), 'pyPorCC'] = 1                                          # HQ Clicks
+        df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] > self.th2), 'pyPorCC'] = 2             # LQ Clicks
+        df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] <= self.th2), 'pyPorCC'] = 3            # N Clicks
 
         return df
 
@@ -245,20 +280,15 @@ class PorCC:
         predicted_df = self.classify_matrix(test_df)
 
         # Compare 'pyPorCC' vs 'ManualAsign'
-        error = test_df['ClassifiedAs'] - predicted_df['pyPorCC']
+        error = np.sum(test_df['ClassifiedAs'] != predicted_df['pyPorCC'])/len(test_df)
 
-        return predicted_df
+        return error, predicted_df
 
 
     def test_PorCC(self, X, y):
         """
         Test the algorithm 
         """
-        # Compute accuracy
-        y_pred = logreg.predict(X)
-        accuracy = logreg.score(X, y)
-        print('Accuracy of logistic regression classifier on test set: {:.2f}'.format(accuracy))
-
         # Compute confusion matrix
         confusion_matrix = metrics.confusion_matrix(y, y_pred)
         print(confusion_matrix)

@@ -162,7 +162,8 @@ class Click:
         self.timestamp = timestamp
 
         # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file 
-        window = sig.get_window('hann', self.nfft)
+        # window = sig.get_window('boxcar', self.nfft)
+        window = sig.get_window('boxcar', 0)
         self.freq, psd = sig.periodogram(x=sound_block, fs=self.fs, nfft=self.nfft, scaling='spectrum')
 
         # Normalize spectrum
@@ -197,12 +198,14 @@ class Click:
         for i in np.arange(0, max_freq_i):
             if psd[max_freq_i - i] < half:
                 break
-            i_left = max_freq_i - i
+            else:
+                i_left = max_freq_i - i
 
-        for i in np.arange(0, max_freq_i):
+        for i in np.arange(0, psd.size - max_freq_i):
             if psd[max_freq_i + i] < half:
                 break
-            i_right = max_freq_i + i
+            else:
+                i_right = max_freq_i + i
                 
         self.bw = (self.freq[i_right] - self.freq[i_left])/1000.0
 

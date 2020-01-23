@@ -89,27 +89,7 @@ def load_pickle_data(path_list):
     df_list = []
     for path in path_list:
         df = pd.read_pickle(path)
-        df_list.append[df]
+        df_list.append(df)
 
-    return 
+    return df_list
     
-
-def calculate_clicks_params(df):
-    """
-    Add to the existing df the click parameters calculated by the Click Class
-    """
-    df_clicks = pd.DataFrame()
-
-    # Calculate all the independent variables and append them to the df
-    for var in self.ind_vars:
-        df_clicks[var] = 0.00
-
-    for idx in df.index:
-        signal = df.loc[idx, 'wave'][:,0]
-        click = sound_click.Click(signal, self.fs, df.loc[idx, 'datetime'], verbose=False)
-        x_coeff = np.correlate(click.sound_block, self.click_model)
-        xc = x_coeff.max()
-        # BW =  powerbw(click, Fs)/1000
-        df_clicks.loc[idx, self.ind_vars] = [click.Q, click.duration, click.ratio, xc, click.cf, click.bw]
-    
-    return df_clicks

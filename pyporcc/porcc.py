@@ -3,33 +3,25 @@ import matplotlib.pyplot as plt
 import os
 import configparser
 import datetime as dt
-import scipy.io as sio
 import itertools
 import pandas as pd
 from scipy import signal as sig
 import statsmodels.api as sm
-# from sklearn.feature_selection import RFE
-from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 import pickle
 import joblib
 
-import sound_click
+import click_detector
 
 
 
 class ClickModel:
-    def __init__(self, click_model_path, fs, train_hq_df, train_lq_df, test_df):
+    def __init__(self, train_hq_df, train_lq_df, test_df):
         """
         Find the click model 
         """
         self.ind_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
         self.dep_vars = ['P']
-        fs_model, self.click_model = sio.wavfile.read(click_model_path)
-        if fs_model != fs: 
-            raise Exception('This click is not recorded at the same frequency than the classified data!')
-        else:
-            self.fs = fs
         self.train_hq_df = train_hq_df
         self.train_lq_df = train_lq_df
         self.test_df = test_df
@@ -68,23 +60,22 @@ class ClickModel:
 
         # Select the appropiate columns combination according to AIC
         models = models[models[:,-1].argsort()]
-        comb = models[0][0]
-        print('The winning combination for %s is %s' % (name, comb))
+        comb, mod, aic = models[0]
+
         y = df['P']
         X = df[comb]
-
-        # Create the logit model
-        logreg = LogisticRegression()
-        logreg.fit(X, y)
+        X = sm.add_constant(X, prepend=False)
 
         if name == 'hq':
-            self.hq_mod = logreg
-            self.hq_params = comb
+            self.hq_mod = mod
+            self.hq_params = X.columns
         else: 
-            self.lq_mod = logreg
-            self.lq_params = comb
+            self.lq_mod = mod
+            self.lq_params = X.columns
 
-        return comb, logreg
+        print('The winning combination for %s is %s. AIC: %s' % (name, comb, aic))
+        print(mod.summary())
+        return X.columns, mod
 
                 
     def find_possible_models(self, name):
@@ -100,13 +91,14 @@ class ClickModel:
         for i in np.arange(1, len(self.ind_vars)+1):
             var_combinations = itertools.combinations(self.ind_vars, i)
             for comb in var_combinations:
-                # print(comb)
                 # Regression model
                 y = df['P']
                 X = df[list(comb)]
+                X = sm.add_constant(X, prepend=False)
                 logit_model = sm.genmod.GLM(endog=y, exog=X, family=sm.families.family.Binomial())
                 reg = logit_model.fit()
                 if not np.isnan(reg.aic):
+                    # models.append([logit_model.exog_names, reg, reg.aic])
                     models.append([list(comb), reg, reg.aic])
 
         return np.array(models)
@@ -155,7 +147,7 @@ class ClickModel:
             raise Exception('This extension is unknown!')
 
 
-    def calculate_clicks_params(self, df_name, save=False):
+    def calculate_clicks_params(self, df_name, fs, click_model_path, save=False):
         """
         Add to the df the click parameters calculated by the Click Class
         """
@@ -168,11 +160,8 @@ class ClickModel:
 
         for idx in df.index:
             signal = df.loc[idx, 'wave'][:,0]
-            click = sound_click.Click(signal, self.fs, df.loc[idx, 'datetime'], verbose=False)
-            x_coeff = np.correlate(click.sound_block, self.click_model)
-            xc = x_coeff.max()
-            # BW =  powerbw(click, Fs)/1000
-            df_clicks.loc[idx, self.ind_vars] = [click.Q, click.duration, click.ratio, xc, click.cf, click.bw]
+            click = click_detector.Click(signal, fs, df.loc[idx, 'datetime'], click_model_path=click_model_path, verbose=False)
+            df_clicks.loc[idx, self.ind_vars] = [click.Q, click.duration, click.ratio, click.xc, click.cf, click.bw]
         
         df_joint = df.join(df_clicks, lsuffix='_mat', rsuffix='')
         if save:
@@ -193,7 +182,7 @@ class PorCC:
         """
         self.th1 = 0.9999                # threshold for HQ clicks
         self.th2 = 0.55                  # threshold for LQ clicks
-        self.lowcutfreq = 100e3          # Lowcut frequency 
+        self.lowcutfreq = 100e3          # Lowcut frequency
         self.highcutfreq = 160e3         # Highcut frequency
 
         if load_type == 'mat':
@@ -232,16 +221,20 @@ class PorCC:
         """
         Classify one row according to the params [PF, CF, Q, XC, duration, ratio, BW]
         """
+        # Add the independent variable
+        X['const'] = 1
         if (X['CF'] > self.lowcutfreq) and (X['CF'] < self.highcutfreq) and (X['Q'] > 4):
             # Evaluate the model on the given x
-            prob_hq = self.hq_mod.predict_proba(X[self.hq_params].values.reshape(1,-1))[0][1]
+            # prob_hq = self.hq_mod.predict_proba(X[self.hq_params].values.reshape(1,-1))[0][1]
+            prob_hq = self.hq_mod.predict(exog=X[self.hq_params].values.astype(np.float))
 
             # Assign clip to a category
             if prob_hq >= self.th1:
                 # HQ click
                 porps = 1  
             else:
-                prob_lq = self.lq_mod.predict_proba(X[self.lq_params].values.reshape(1,-1))[0][1]
+                # prob_lq = self.lq_mod.predict_proba(X[self.lq_params].values.reshape(1,-1))[0][1]
+                prob_lq = self.lq_mod.predict(exog=X[self.lq_params].values.astype(np.float))
                 if prob_lq > self.th2:
                     # LQ click
                     porps = 2  
@@ -258,10 +251,18 @@ class PorCC:
         """
         Classify according to the params [PF, CF, Q, XC, duration, ratio, BW]
         """
+        # Add the independent variable for the regression
+        df['const'] = 1
+
+        # Initialize the prediction column
         df['pyPorCC'] = 0
+
         # Evaluate the model on the given x
-        df['prob_hq'] = self.hq_mod.predict_proba(df[self.hq_params])[:, 1]
-        df['prob_lq'] = self.lq_mod.predict_proba(df[self.lq_params])[:, 1]
+        # df['prob_hq'] = self.hq_mod.predict_proba(df[self.hq_params])[0][:,1]
+        # df['prob_lq'] = self.lq_mod.predict_proba(df[self.lq_params])[0][:,1]
+        df['prob_hq'] = self.hq_mod.predict(df[self.hq_params].values.astype(np.float))
+        df['prob_lq'] = self.lq_mod.predict(df[self.lq_params].values.astype(np.float))
+        
 
         # Decide
         loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
@@ -278,34 +279,15 @@ class PorCC:
         Test the algorithm. With the same parameters, test the prediction output of the algorithm
         """
         predicted_df = self.classify_matrix(test_df)
+        # predicted_df = test_df
+        # predicted_df['pyPorCC'] = 0
+        # for idx in test_df.index:
+        #     row = test_df.loc[idx]
+        #     classif = self.classify_row(row)
+        #     predicted_df.loc[idx, 'pyPorCC'] = classif
 
-        # Compare 'pyPorCC' vs 'ManualAsign'
+
+        # Compare 'pyPorCC' vs 'ClassifiedAs' (MATLAB)
         error = np.sum(test_df['ClassifiedAs'] != predicted_df['pyPorCC'])/len(test_df)
 
         return error, predicted_df
-
-
-    def test_PorCC(self, X, y):
-        """
-        Test the algorithm 
-        """
-        # Compute confusion matrix
-        confusion_matrix = metrics.confusion_matrix(y, y_pred)
-        print(confusion_matrix)
-
-        # Plot ROC
-        logit_roc_auc = metrics.roc_auc_score(y, logreg.predict(X))
-        fpr, tpr, thresholds = metrics.roc_curve(y, logreg.predict_proba(X)[:,1])
-        plt.figure()
-        plt.plot(fpr, tpr, label='Logistic Regression (area = %0.2f)' % logit_roc_auc)
-        plt.plot([0, 1], [0, 1],'r--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver operating characteristic')
-        plt.legend(loc="lower right")
-        plt.savefig('Log_ROC')
-        plt.show()
-
-        return confusion_matrix

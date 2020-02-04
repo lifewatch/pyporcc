@@ -3,14 +3,12 @@ import datetime as dt
 import scipy.io as sio
 import pandas as pd
 
-import sound_click
-
 """
 Convert the data from matlab format to python format of the Cosentino DB
 """
 
 
-def mat2df(self, mat_path, name):
+def mat2df(mat_path, name):
     """
     Read the .mat files and convert them to a pandas data frame
     name: HQ or LQ
@@ -35,7 +33,7 @@ def mat2df(self, mat_path, name):
     return df
 
 
-def mat2df_test(self, mat_path):
+def mat2df_test(mat_path):
     """
     Read the .mat files and convert them to a pandas data frame
     """
@@ -59,13 +57,15 @@ def mat2df_test(self, mat_path):
     df['CF'] = mat['CF'][0].astype(np.double)
     df['BW'] = mat['BW'][0].astype(np.double)
     df['Q'] = mat['Q'][0].astype(np.double)
+    df['XC'] = mat['XC'][0].astype(np.double)
+    df['ratio'] = mat['ratio'][0].astype(np.double)
     df['ManualAsign'] = mat['ManualAsign'][0].astype(np.uint)
     df['ClassifiedAs'] = mat['ClassifiedAs'][0].astype(np.uint)
 
     return df
 
 
-def all_mat2pkl(self, path_dict):
+def all_mat2pkl(path_dict):
     """
     Save the data of all the files to a pkl file for easier reading 
     """

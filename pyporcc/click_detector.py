@@ -9,6 +9,7 @@ from scipy import signal as sig
 import soundfile as sf
 import pandas as pd
 import numba as nb
+import zipfile
 
 
 
@@ -27,17 +28,17 @@ class ClickDetector:
 
         # Initialize the filters. Create them default if None is passed
         if prefilter is None:
-            self.prefilter = sig.butter(N=4, Wn=500, btype='high', analog=False, output='sos', fs=fs)
+            nyq = fs/2
+            Wn = [100000/nyq, 150000/nyq] 
+            self.prefilter = sig.butter(N=4, Wn=Wn, btype='bandpass', analog=False, output='sos')
         else:
             self.prefilter = prefilter
         
         if dfilter is None:
-            self.dfilter = sig.butter(N=4, Wn=2000, btype='high', analog=False, output='sos', fs=fs)
+            Wn = 20000
+            self.dfilter = sig.butter(N=2, Wn=Wn, btype='high', analog=False, output='sos', fs=fs)
         else:
             self.dfilter = dfilter
-
-        # Parameters for recursive reading
-        self.filter_state = np.zeros((2,2))
 
         # Dictionary with all the clips
         self.clips = {}
@@ -49,9 +50,11 @@ class ClickDetector:
         """
         if key == 'fs':
             if self.__dict__[key] != value: 
-                self.prefilter = sig.butter(N=4, Wn=500, btype='high', analog=False, output='sos', fs=value)
-                self.dfilter = sig.butter(N=4, Wn=2000, btype='high', analog=False, output='sos', fs=value)   
-                self.__dict__[key] = value             
+                Wn_pre = [100000, 150000] 
+                self.prefilter = sig.butter(N=8, Wn=Wn_pre, btype='bandpass', analog=False, output='sos', fs=value)
+                Wn_d = 20000
+                self.dfilter = sig.butter(N=4, Wn=Wn_d, btype='high', analog=False, output='sos', fs=value)
+        self.__dict__[key] = value         
                 
 
     def pre_filter(self, xn):
@@ -64,16 +67,15 @@ class ClickDetector:
         return xi
 
 
-    def add_click_clips(self, sound_file, date, block_n, clips_list):
+    def add_click_clips(self, sound_file, date, block_start_sample, clips_list):
         """
         Add all the clips list to the dictionary 
         """
         for clip in clips_list:
-            self.add_click_clip(sound_file, date, block_n*clip[0], block_n*clip[1])
+            self.add_click_clip(sound_file, date, block_start_sample+clip[0], clip[1])
 
 
-
-    def add_click_clip(self, sound_file, date, start_sample, frames):
+    def add_click_clip(self, sound_file, date, start_sample, frames, verbose=False):
         """
         Add the clip to the clip dictionary 
         """
@@ -87,17 +89,15 @@ class ClickDetector:
         
         # Filter the clip and add it to the dictionary
         filtered_clip = sig.sosfilt(self.dfilter, clip)
-        self.clips[timestamp] = filtered_clip
+        self.clips[timestamp] = (start_sample, filtered_clip)
 
-
-    def clip2click(self, datetime, signal, click_model_path):
-        """
-        Return a click object from a 
-        """
-        clip = self.clips[datetime]
-        click = Click(signal, self.fs, datetime, click_model_path=click_model_path)
-
-        return click 
+        if verbose:
+            fig, ax = plt.subplots(2,1)
+            ax[0].plot(clip, label='Signal not filtered')
+            ax[1].plot(filtered_clip, label='Filtered signal')
+            plt.tight_layout()
+            plt.show()
+            plt.close()
 
 
     def detect_click_clips(self, sound_file_path, date, blocksize=2048):
@@ -107,10 +107,19 @@ class ClickDetector:
         # Open file
         sound_file = sf.SoundFile(sound_file_path, 'r')
 
+        # Update the frequency 
+        if sound_file.samplerate != self.fs: 
+            self.fs = sound_file.samplerate
+
+        # Start the filter conditions
+        zi = sig.sosfilt_zi(self.prefilter)
+
         # Initialize the values of Si and Ni using the first block
         first_block = sound_file.read(frames=blocksize, always_2d=True)[:,0]
-        sound_file.seek(blocksize)
-        self.triggerfilter.initialize_SN(first_block)
+        zi = first_block.mean() * zi
+        filtered_first_block, zi = sig.sosfilt(self.prefilter, first_block, zi=zi)
+        zi = first_block.mean() * zi
+        self.triggerfilter.initialize_SN(filtered_first_block)
 
         # Initialize the clicks count
         n_on = 0
@@ -119,28 +128,41 @@ class ClickDetector:
 
         # Read the file by blocks
         for block_n, block in enumerate(sound_file.blocks(blocksize=blocksize, always_2d=True)):
-            prefilter_sig = sig.sosfilt(self.prefilter, block[:,0])
+            prefilter_sig, zi = sig.sosfilt(self.prefilter, block[:,0], zi=zi)
+
             # Read samples one by one, apply filter
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
-            self.add_click_clips(sound_file, date, block_n, clips)
-             
+            self.add_click_clips(sound_file, date, block_n*blocksize, clips)
+            if len(clips) > 0:
+                print('clicks!')
+
+            # plt.plot(prefilter_sig, label='Filtered')
+            # plt.show()
 
 
-    def clicks_df(self, click_model_path):
+    def get_click_clips(self, hydrophone, folder_path, zip_mode=False):
         """
-        Find all the clicks and return them as a df with all the clicks params
+        Go through all the sound files and create a database with the detected clicks. Set zip_mode to True if the files are zipped
         """
-        cols=['datetime', 'Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
-        clicks_df = pd.DataFrame(columns=cols)
-
-        idx = 0
-        for datetime, wave in self.clips.items():
-            click = self.clip2click(datetime, wave, click_model_path)
-            clicks_df.loc[idx, cols] = [click.timestamp, click.Q, click.duration, click.ratio, click.xc, click.cf, click.bw]
-            idx += 1
-
-        return clicks_df
-
+        # Run the classifier in every file of the folder
+        for day_folder_name in os.listdir(folder_path):
+            day_folder_path = os.path.join(folder_path, day_folder_name)
+            if zip_mode:
+                zip_folder = zipfile.ZipFile(day_folder_path, 'r', allowZip64=True)
+                files_list = zip_folder.namelist()
+            else:
+                files_list = os.listdir(day_folder_path)
+            for file_name in files_list:
+                extension = file_name.split(".")[-1]
+                if extension == 'wav':
+                    print(file_name)
+                    # Get the wav
+                    if zip_mode:
+                        wav_file = zip_folder.open(file_name)
+                    else:
+                        wav_file = os.path.join(day_folder_path, file_name)
+                    date = hydrophone.get_name_date(file_name)
+                    self.detect_click_clips(wav_file, date) 
 
 
 
@@ -153,6 +175,7 @@ spec = [
     ('min_separation', nb.int32),
     ('Si', nb.float32),
     ('Ni', nb.float32),
+    ('trigger', nb.boolean)
 ]
 
 @nb.jitclass(spec)
@@ -171,6 +194,8 @@ class TriggerFilter:
         self.Si = 0
         self.Ni = 0
 
+        self.trigger = False
+
 
     def initialize_SN(self, block):
         """
@@ -180,51 +205,68 @@ class TriggerFilter:
         self.Ni = np.abs(block).mean()
 
     
-    def run(self, xi, click_on):
+    def run(self, xi):
         """
         Raise the trigger if SNR is higher than the threshold
         """
         # Calculate the SNR 
         self.Si = self.short_filt * np.abs(xi) + (1 - self.short_filt) * self.Si
 
-        if click_on:
+        if self.trigger:
             self.Ni = self.long_filt2 * np.abs(xi) + (1 - self.long_filt2) * self.Ni
         else: 
             self.Ni = self.long_filt * np.abs(xi) + (1 - self.long_filt) * self.Ni
         
         # Compute SNR = Si/Ni and compare it to the threshold
         if (self.Si / self.Ni) > self.threshold:
-            return True
+            self.trigger = True
         else:
-            return False
+            self.trigger = False
 
 
     def update_block(self, prefilter_signal, click_on, n_on, n_off):
         """
         Read all the samples of the blog and update the parameters
         """
+        if click_on:
+            start_sample = -n_on
         clips = []
         i = 0
         for xi in prefilter_signal:    
-            if self.run(xi, click_on):
-                if click_on:
-                    if n_on == self.max_length:
-                        clips.append((i, n_on))
-                        n_on = 0
+            self.run(xi)
+            if click_on:
+                if self.trigger: 
+                    # Continue the click 
+                    # In case we were already in the count down but it is actually the same click,
+                    # consider the count down as part of the click!
+                    if n_off > 0: 
+                        n_on += n_off
+                        n_off = 0
+                    n_on += 1
+
+                    # If it has been on for too long, save the click! 
+                    if n_on >= self.max_length:
+                        clips.append((start_sample, n_on))
                         click_on = False
+                        n_on = 0
                 else:
-                    click_on = True
-                n_on += 1
-                    
-            else:
-                if click_on:
+                    # If it has been off for more than min_separation, save the click! 
                     if n_off >= self.min_separation:
-                        # self.add_click_clip(sound_file, date, i*block_n, n_on) 
-                        clips.append((i, n_on))
-                        n_on = 0 
-                        n_off = 0 
-                        click_on = False 
-                        n_off += 1  
+                        clips.append((start_sample, n_on))
+                        click_on = False
+                        n_on = 0
+                        n_off = 0
+                    else:
+                        # Start to end the click
+                        n_off += 1
+            else:
+                if self.trigger: 
+                    # Start a new click 
+                    start_sample = i
+                    click_on = True
+                    n_on = 0
+                    n_off = 0
+            
             i += 1
 
         return clips, click_on, n_on, n_off
@@ -277,7 +319,7 @@ class Click:
         self.duration = (iend - istart) / self.fs * 1e6         # duration in microseconds
                 
         # Parameters according to Mhl & Andersen, 1973 
-        self.Q = (self.cf / self.rmsbw) / 1000.0
+        self.q = (self.cf / self.rmsbw) / 1000.0
         self.ratio = self.pf / self.cf
         
         # Calculate -3dB bandwith: Consecutive frequencies of the psd that have more than half of the maximum freq power
@@ -308,38 +350,58 @@ class Click:
             plt.show()
             plt.close()
 
+        
+    def __getattribute__(self, name):
+        """ 
+        Avoid confusion with capital and low letters 
+        """
+        return super().__getattribute__(name.lower())
 
 
-def read_calibration(serial_number):
-    """
-    Read the calibration file of the sountrap serial number and store it in a dictionary
-    """
-    configfile_path = os.path.join('pyporcc/calibration', str(serial_number)+'.ini')
-    config = configparser.ConfigParser()
-    config.read(configfile_path)
-    high_gain = float(config["End-to-End_Calibration"]["High_Gain_dB"])
-    low_gain = float(config["End-to-End_Calibration"]["Low_Gain_dB"])
-    rti_level = float(config["Calibration_Tone"]["RTI_Level_at_1kHz_dB_re_1_uPa"])
-    calibration = {"High": high_gain, "Low": low_gain, "RTI": rti_level}
 
-    return calibration
+class ClickConverter:
+    def __init__(self, click_model_path, click_vars=None):
+        """
+        Init the click converter
+        """
+        self.click_model_path = click_model_path
+        if click_vars == None: 
+            self.click_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
+        else:
+            self.click_vars = click_vars
 
 
-def wav2uPa(calibration, signal):
-    """
-    Convert the values of the wav file to the levels of SPL according to the calibration
-    """
-    # Calibration value from dB to ratio
-    cal_value = np.power(10, calibration / 20.0)
-    signal_uPa = signal * cal_value
+    def clicks_df(self, df, save=False, save_path=None):
+        """
+        Find all the clicks and return them as a df with all the clicks params
+        df needs to have at least datetime and wave
+        """
+        # Start a new dataframe
+        df_clicks = pd.DataFrame()
 
-    return signal_uPa
+        # Calculate all the independent variables and append them to the df
+        for var in self.click_vars:
+            df_clicks[var] = 0.00
 
+        for idx in df.index:
+            signal = df.loc[idx, 'wave']
+            click = Click(signal, df.fs, df.loc[idx, 'datetime'], click_model_path=self.click_model_path, verbose=False)
+            values = []
+            for var in self.click_vars:
+                values.append(getattr(click, var))
+            df_clicks.loc[idx, self.click_vars] = values
+        
+        # Keep the metadata
+        df_clicks.fs = df.fs 
 
-def uPa2spl(samples):
-    """
-    Convert from uPa to dB
-    """
-    spl = 20 * np.log10(samples)
+        if save:
+            extension = save_path.split('.')[-1]
+            if extension == 'json':
+                df_clicks.to_json(save_path)
+            elif extension == 'pkl':
+                df_clicks.to_pickle(save_path)
+            else:
+                raise Exception('The extension %s is unkown' % (extension))
 
-    return spl
+        return df_clicks
+

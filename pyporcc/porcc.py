@@ -7,15 +7,16 @@ import itertools
 import pandas as pd
 from scipy import signal as sig
 import statsmodels.api as sm
-from sklearn import metrics
+from sklearn import metrics, linear_model
 import pickle
 import joblib
 
+# import pyporcc.click_detector as click_detector
 import click_detector
 
 
 
-class ClickModel:
+class PorCCModel:
     def __init__(self, train_hq_df, train_lq_df, test_df):
         """
         Find the click model 
@@ -49,6 +50,36 @@ class ClickModel:
         return df
 
 
+    def load_model_from_config(self, configfile_path):
+        """
+        Load PorCC model coefficients 
+        """
+        config = configparser.ConfigParser()
+        config.read(configfile_path)
+
+        logitCoefHQ = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(np.float)
+        logitCoefLQ = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(np.float)
+        
+        self.hq_params = np.array(config['MODEL']['hq_params'].split(','))
+        self.lq_params = np.array(config['MODEL']['lq_params'].split(','))
+
+        # Starts and fit to get the classes 
+        logit_hq = linear_model.LogisticRegression()
+        reg_hq = logit_hq.fit(self.train_hq_df[self.hq_params], self.train_hq_df['P'])
+
+        logit_lq = linear_model.LogisticRegression()
+        reg_lq = logit_lq.fit(self.train_lq_df[self.lq_params], self.train_lq_df['P'])
+
+        # Cheat and force the coefficients
+        reg_hq.coef_ = np.array([logitCoefHQ[:-1]])
+        reg_hq.intercept_ = logitCoefHQ[-1]
+        self.hq_mod = reg_hq
+
+        reg_lq.coef_ = np.array([logitCoefLQ[:-1]])
+        reg_lq.intercept_=logitCoefLQ[-1]
+        self.lq_mod = reg_lq
+
+
     def find_best_model(self, name):
         """
         Find the best model among the possible models
@@ -64,7 +95,6 @@ class ClickModel:
 
         y = df['P']
         X = df[comb]
-        X = sm.add_constant(X, prepend=False)
 
         if name == 'hq':
             self.hq_mod = mod
@@ -94,17 +124,22 @@ class ClickModel:
                 # Regression model
                 y = df['P']
                 X = df[list(comb)]
-                X = sm.add_constant(X, prepend=False)
-                logit_model = sm.genmod.GLM(endog=y, exog=X, family=sm.families.family.Binomial())
-                reg = logit_model.fit()
-                if not np.isnan(reg.aic):
-                    # models.append([logit_model.exog_names, reg, reg.aic])
-                    models.append([list(comb), reg, reg.aic])
+                
+                logit = linear_model.LogisticRegression(max_iter=500, tol=1e-5, C=0.1)
+                reg = logit.fit(X, y)
+
+                # Calculate AIC
+                prob = reg.predict_log_proba(X)
+                llk = np.sum(y*prob[:,1] + (1-y)*prob[:,0])
+                aic = 2*(len(comb)) - 2*(llk)
+
+                # Append the model
+                models.append([list(comb), reg, aic])
 
         return np.array(models)
 
 
-    def test_model(self, X, y):
+    def test_model(self, logreg, X, y):
         """
         Test the model with the test data 
         """
@@ -151,17 +186,15 @@ class ClickModel:
         """
         Add to the df the click parameters calculated by the Click Class
         """
+        # Pick the right df
         df = self.pick_df(df_name)
-        df_clicks = pd.DataFrame()
 
-        # Calculate all the independent variables and append them to the df
-        for var in self.ind_vars:
-            df_clicks[var] = 0.00
-
-        for idx in df.index:
-            signal = df.loc[idx, 'wave'][:,0]
-            click = click_detector.Click(signal, fs, df.loc[idx, 'datetime'], click_model_path=click_model_path, verbose=False)
-            df_clicks.loc[idx, self.ind_vars] = [click.Q, click.duration, click.ratio, click.xc, click.cf, click.bw]
+        # Pass the samplig frequency as metadata
+        df.fs = fs
+        
+        # Init a converter to calculate all the params
+        converter = click_detector.ClickConverter(click_model_path, self.ind_vars)
+        df_clicks = converter.clicks_df(df)
         
         df_joint = df.join(df_clicks, lsuffix='_mat', rsuffix='')
         if save:
@@ -170,14 +203,15 @@ class ClickModel:
         return df_joint
 
 
+
 class PorCC:
     def __init__(self, load_type, **kwargs):
         """
         Start the classifier 
-        if load_type is set to 'mat', loads the models from the config file
+        if load_type is set to 'manual', loads the models from the config file
         Then config_file must be specified
 
-        if load_type is not set to 'mat'
+        if load_type is not set to 'trained_model'
         Then hq_mod, lq_mod, hq_params, lq_params have to be specified
         """
         self.th1 = 0.9999                # threshold for HQ clicks
@@ -185,28 +219,31 @@ class PorCC:
         self.lowcutfreq = 100e3          # Lowcut frequency
         self.highcutfreq = 160e3         # Highcut frequency
 
-        if load_type == 'mat':
-            self.models_from_mat(kwargs['config_file'])
+        self.load_type = load_type
+        if load_type == 'manual':
+            self.manual_models(kwargs['config_file'])
         else:
             for key, val in kwargs.items(): 
                 self.__dict__[key] = val
-    
 
-    def models_from_config(self, config_file):
+
+    def manual_models(self, configfile_path):
         """
-        Read the models from the config files 
+        Load the coefficients of the models to calculate the probablity manually 
         """
         config = configparser.ConfigParser()
         config.read(configfile_path)
 
-        logitCoefHQ = np.array(config['MODEL']['logitCoefHQ'])
-        logitCoefLQ = np.array(config['MODEL']['logitCoefLQ'])
+        hq_coef = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(np.float)
+        lq_coef = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(np.float)
+
+        self.hq_mod = ManualLogit(hq_coef)
+        self.lq_mod = ManualLogit(lq_coef)
         
-        self.hq_params = np.array(config['MODEL']['hq_params'])
-        self.lq_params = np.array(config['MODEL']['lq_params'])
+        self.hq_params = np.array(config['MODEL']['hq_params'].split(','))
+        self.lq_params = np.array(config['MODEL']['lq_params'].split(','))
 
 
-    
     def classify_click(self, click):
         """
         Classify the click in HQ, LQ, N
@@ -225,16 +262,14 @@ class PorCC:
         X['const'] = 1
         if (X['CF'] > self.lowcutfreq) and (X['CF'] < self.highcutfreq) and (X['Q'] > 4):
             # Evaluate the model on the given x
-            # prob_hq = self.hq_mod.predict_proba(X[self.hq_params].values.reshape(1,-1))[0][1]
-            prob_hq = self.hq_mod.predict(exog=X[self.hq_params].values.astype(np.float))
+            prob_hq = self.hq_mod.predict_proba(X[self.hq_params].values.reshape(1,-1))[0][1]
 
             # Assign clip to a category
             if prob_hq >= self.th1:
                 # HQ click
                 porps = 1  
             else:
-                # prob_lq = self.lq_mod.predict_proba(X[self.lq_params].values.reshape(1,-1))[0][1]
-                prob_lq = self.lq_mod.predict(exog=X[self.lq_params].values.astype(np.float))
+                prob_lq = self.lq_mod.predict_proba(X[self.lq_params].values.reshape(1,-1))[0][1]
                 if prob_lq > self.th2:
                     # LQ click
                     porps = 2  
@@ -258,11 +293,8 @@ class PorCC:
         df['pyPorCC'] = 0
 
         # Evaluate the model on the given x
-        # df['prob_hq'] = self.hq_mod.predict_proba(df[self.hq_params])[0][:,1]
-        # df['prob_lq'] = self.lq_mod.predict_proba(df[self.lq_params])[0][:,1]
-        df['prob_hq'] = self.hq_mod.predict(df[self.hq_params].values.astype(np.float))
-        df['prob_lq'] = self.lq_mod.predict(df[self.lq_params].values.astype(np.float))
-        
+        df['prob_hq'] = self.hq_mod.predict_proba(df[self.hq_params])[0][:,1]
+        df['prob_lq'] = self.lq_mod.predict_proba(df[self.lq_params])[0][:,1]
 
         # Decide
         loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
@@ -291,3 +323,44 @@ class PorCC:
         error = np.sum(test_df['ClassifiedAs'] != predicted_df['pyPorCC'])/len(test_df)
 
         return error, predicted_df
+
+
+
+class ManualLogit:
+    def __init__(self, coef, th=0.5):
+        """
+        Init a logit probabilty prediction class
+        """
+        self.coef_ = coef
+        self.th_ = th
+
+
+    def predict(self, X):
+        """
+        Predict the classification of X
+        """
+        proba = self.predict_proba(X)[0][:,1]
+        y_pred = np.zeros(proba.shape)
+        y_pred[np.where(proba >= self.th_)] = 1
+
+        return y_pred
+
+    
+    def predict_proba(self, X):
+        """
+        Predict the probability
+        """
+        z = np.sum(X*self.coef_[1:], axis=1) + self.coef_[0]
+        prob_1 = 1/(1 + np.power(np.e, z))
+        prob = np.column_stack((prob_1, 1-prob_1))
+
+        return [prob]
+
+    
+    def predict_log_proba(self, X):
+        """
+        Predict the log probability
+        """
+        log_prob = np.log(self.predict_proba(X)[0])
+
+        return log_prob

@@ -35,8 +35,3 @@ defined as “any series of clicks separated by gradually or
 cyclically changing inter-click interval suggesting a unit during an echolocation event or a communication signal”
 
 """
-
-
-import mat2py 
-import sound_click
-from porcc import ClickModel, PorCC

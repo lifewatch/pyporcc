@@ -3,11 +3,14 @@ configparser==4.0.2
 cycler==0.10.0
 joblib==0.14.1
 kiwisolver==1.1.0
+llvmlite==0.31.0
 matplotlib==3.1.2
+numba==0.48.0
 numpy==1.18.1
 pandas==0.25.3
 patsy==0.5.1
 pycparser==2.19
+pyhydrophone==0.1
 pyparsing==2.4.6
 PySoundFile==0.9.0.post1
 python-dateutil==2.8.1

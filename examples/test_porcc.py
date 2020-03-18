@@ -7,12 +7,11 @@ import pymongo
 import json
 
 import pyvalmongo
+import pyhydrophone as pyhy
 
 from pyporcc import mat2py
 from pyporcc import porcc
 from pyporcc import click_detector
-from pyporcc import pamguard
-from pyporcc import soundtrap
 
 
 
@@ -36,7 +35,7 @@ name = 'SoundTrap'
 model = 1
 serial_number = 67416073
 Vpp = 2
-hydrophone = soundtrap_hf.SoundTrapHF(name, model, serial_number, Vpp)
+hydrophone = pyhy.SoundTrapHF(name, model, serial_number, Vpp)
 
 # lowcutfreq = 100e3          # Lowcut frequency 
 # highcutfreq = 160e3         # Highcut frequency
@@ -154,7 +153,6 @@ if __name__ == "__main__":
     # cd = click_detector.ClickDetector()
     # cd.get_click_clips(hydrophone, folder_path)
     # clicks_df = cd.clicks_df(click_model_path)
-    # pamguard_clicks = pamguard.read_clicks_output(pamguard_db)
     # classification = porcc_al.classify_matrix(clicks_df)
 
     # Read Sountrap output 

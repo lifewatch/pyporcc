@@ -10,11 +10,14 @@ import pyhydrophone as pyhy
 
 from pyporcc import porcc
 from pyporcc import porpoise_classifier
+from pyporcc import click_detector
 
 
 # Cosentino data
 click_model_path = 'pyporcc/data/cosentino/standard_click.wav'
+fs_data = 500000
 
+# Data with the params already calculated
 train_hq_data_path = 'pyporcc/data/clicks_hq.pkl'
 train_lq_data_path = 'pyporcc/data/clicks_lq.pkl'
 test_data_path = 'pyporcc/data/clicks_test.pkl'
@@ -25,9 +28,20 @@ df_lq = pd.read_pickle(train_lq_data_path)
 df_test = pd.read_pickle(test_data_path)
 
 
+# In case the parameters are not calculated
+def calculate_click_params(click_model_path, df_list):
+    """
+    Add the click parameters calculations to the df in case they have not been calculated yet 
+    """
+    converter = click_detector.ClickConverter(click_model_path)
+    new_df = []
+    for df in df_list: 
+        new_df.append(converter.clicks_df(df))
+    
+    return new_df
 
 
-def porcc_models(fs_data, df_hq, df_lq, df_test):
+def porcc_models(df_hq, df_lq, df_test):
     """
     The df have to be with all the click parameters already calculated!
     """
@@ -62,7 +76,7 @@ if __name__ == "__main__":
     Start a PorCC study and apply the classifier to all the sound files 
     """
     # Train the model and save it
-    models_porcc = porcc_models(fs_data, train_hq_data_path, train_lq_data_path, test_data_path)
+    models_porcc = porcc_models(train_hq_data_path, train_lq_data_path, test_data_path)
 
     models_list = ['svc', 'logit', 'forest', 'knn']
     models_custom = other_models(df_hq, df_lq, df_test, models_list)

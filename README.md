@@ -7,8 +7,14 @@ Adapted code to python from the paper:
 
 
 ## INFORMATION ABOUT PYTHON FILES
-- sound_click.py: read sound files and create click cuttings out of it
+- click_detector.py: read sound files and create click cuttings out of it
 - porcc: model class and PorCC algorithm class
+- propoise_classifier: other models that can be trained to classify clicks (not PorCC)
+
+### Examples:
+- detect_clicks: how to use the click detector algorithm 
+- create_model: how to train and save models from validated data. Examples for PorCC and other are provided
+- classify: how to use the classifiers if the models are already trained and stored
 
 
 

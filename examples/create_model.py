@@ -1,10 +1,4 @@
 import pandas as pd
-import numpy as np
-import os
-import soundfile as sf
-import configparser
-import pymongo
-import json
 
 import pyhydrophone as pyhy
 

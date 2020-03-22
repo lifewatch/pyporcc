@@ -405,3 +405,14 @@ class ClickConverter:
 
         return df_clicks
 
+
+    def test_click_calculation(self, df_clicks, df_test, col_vars):
+        """
+        Test the calculation of the click parameters indicated in col_vars obtained with python compared to the ones obtained in the paper (on the Test DB)
+        """
+        # Compare each field
+        rel_error = np.abs(df_test[col_vars] - df_clicks[col_vars])/df_test[col_vars].mean()
+        mean_rel_error = rel_error.mean()
+        
+        return mean_rel_error
+

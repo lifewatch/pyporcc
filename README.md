@@ -8,7 +8,6 @@ Adapted code to python from the paper:
 
 ## INFORMATION ABOUT PYTHON FILES
 - sound_click.py: read sound files and create click cuttings out of it
-- mat2py.py: utils to read mat file, save in as pickle and load df
 - porcc: model class and PorCC algorithm class
 
 

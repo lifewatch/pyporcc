@@ -13,12 +13,18 @@ import pickle
 
 
 class PorpoiseClassifier:
-    def __init__(self, train_data=None, test_data=None):
+    def __init__(self, train_data=None, test_data=None, ind_vars=None, dep_var=None):
         """
         Find the click model 
         """
-        self.ind_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
-        self.dep_var = 'class'
+        if ind_vars is None:
+            self.ind_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
+        else:
+            self.ind_vars = ind_vars
+        if dep_var is None: 
+            self.dep_var = 'class'
+        else:
+            self.dep_var = dep_var
         self.train_data = train_data
         self.test_data = test_data
         self.models = {}

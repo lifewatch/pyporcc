@@ -11,8 +11,7 @@ from sklearn import metrics, linear_model
 import pickle
 import joblib
 
-# import pyporcc.click_detector as click_detector
-import click_detector
+import pyporcc.click_detector as click_detector
 
 
 
@@ -211,7 +210,7 @@ class PorCC:
         if load_type is set to 'manual', loads the models from the config file
         Then config_file must be specified
 
-        if load_type is not set to 'trained_model'
+        if load_type is set to 'trained_model'
         Then hq_mod, lq_mod, hq_params, lq_params have to be specified
         """
         self.th1 = 0.9999                # threshold for HQ clicks
@@ -306,21 +305,14 @@ class PorCC:
         return df
 
     
-    def test_classification_vs_matlab(self, test_df):
+    def test_classification(self, test_df, col_name='ClassifiedAs'):
         """
         Test the algorithm. With the same parameters, test the prediction output of the algorithm
         """
         predicted_df = self.classify_matrix(test_df)
-        # predicted_df = test_df
-        # predicted_df['pyPorCC'] = 0
-        # for idx in test_df.index:
-        #     row = test_df.loc[idx]
-        #     classif = self.classify_row(row)
-        #     predicted_df.loc[idx, 'pyPorCC'] = classif
-
 
         # Compare 'pyPorCC' vs 'ClassifiedAs' (MATLAB)
-        error = np.sum(test_df['ClassifiedAs'] != predicted_df['pyPorCC'])/len(test_df)
+        error = np.sum(test_df[col_name] != predicted_df['pyPorCC'])/len(test_df)
 
         return error, predicted_df
 

@@ -23,13 +23,16 @@ df_test = pd.read_pickle(test_data_path)
 
 
 # In case the parameters are not calculated
-def calculate_click_params(click_model_path, df_list):
+def calculate_click_params(click_model_path, df_list, fs_data=None):
     """
     Add the click parameters calculations to the df in case they have not been calculated yet 
     """
     converter = click_detector.ClickConverter(click_model_path)
     new_df = []
     for df in df_list: 
+        # Add the parameter fs_data in case it it specified
+        if fs_data is not None: 
+            df.fs = fs_data
         new_df.append(converter.clicks_df(df))
     
     return new_df

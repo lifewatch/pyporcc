@@ -6,24 +6,16 @@ from pyporcc import click_detector
 ############## CONFIG
 
 # Sound Files
-sound_folder_path = "C:/Users/cleap/Documents/Data/Sound Data/SoundTrap/BelwindTest"
-# sound_folder_path = '//archive/cpod/Soundtrap/najaar2017_reefballs_Belwind'
-# sound_folder_path = "C:/Users/cleap/Documents/Data/Sound Data/Seiche/AutonautTest"
+sound_folder_path = "C:/Users/cleap/Documents/Data/Sound Data/Seiche/AutonautTest"
 
 
 # Hydrophone 
-# name = 'Seiche'
-# model = 'uPam'
-# sensitivity = -196.0
-# preamp_gain = 0.0
-# Vpp = 2.0
-# hydrophone = pyhy.Seiche(name, model, sensitivity, preamp_gain, Vpp)
-
-name = 'SoundTrap'
-model = 1
-serial_number = 67416073
-Vpp = 2
-hydrophone = pyhy.SoundTrapHF(name, model, serial_number, Vpp)
+name = 'Seiche'
+model = 'uPam'
+sensitivity = -196.0
+preamp_gain = 0.0
+Vpp = 2.0
+hydrophone = pyhy.Seiche(name, model, sensitivity, preamp_gain, Vpp)
 
 
 # Filters parameters
@@ -37,7 +29,7 @@ click_model_path = 'pyporcc/data/standard_click.wav'
 
 
 # Output path for the detected clicks
-clicks_output_path = 'pyporcc/data/soundtrap_clicks.pkl'
+clicks_output_path = 'pyporcc/data/autonaut_clicks.pkl'
 
 
 

@@ -1,3 +1,5 @@
+import os
+import sys
 import pyhydrophone as pyhy
 
 from pyporcc import click_detector
@@ -27,11 +29,8 @@ min_separation_time = 0.1
 # Click model
 click_model_path = 'pyporcc/data/standard_click.wav'
 
-
 # Output path for the detected clicks
-clicks_output_path = 'pyporcc/data/autonaut_clicks.pkl'
-
-
+clicks_output_path = 'C:/Users/cleap/Documents/Data/Sound Data/Clicks/autonaut_clicks.pkl'
 
 
 if __name__ == "__main__":

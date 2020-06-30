@@ -1,5 +1,6 @@
+import os
+import sys
 import pandas as pd
-
 
 from pyporcc import porcc
 
@@ -10,9 +11,8 @@ models_config_path = 'pyporcc/models/log_models.ini'
 # Already trained models 
 models_trained_path = 'pyporcc/models/porcc_models.pkl'
 
-
 # Data to classify
-test_data_path = 'pyporcc/data/clicks_test.pkl'
+test_data_path = 'C:/Users/cleap/Documents/Data/Sound Data/Clicks/cosentino/porcc_params/clicks_test.pkl'
 
 
 def load_porcc_classifier_coef(config_file):

@@ -1,15 +1,21 @@
-import numpy as np
-import matplotlib.pyplot as plt 
+
 import os
-import configparser
-import datetime as dt
-import itertools
-import pandas as pd
-from scipy import signal as sig
-import statsmodels.api as sm
-from sklearn import metrics, linear_model
+import sys
 import pickle
 import joblib
+import itertools
+import numpy as np
+import pandas as pd
+import configparser
+import datetime as dt
+import statsmodels.api as sm
+from scipy import signal as sig
+import matplotlib.pyplot as plt 
+
+from sklearn import metrics, linear_model, model_selection, preprocessing
+
+pd.plotting.register_matplotlib_converters()
+plt.style.use('ggplot')
 
 import pyporcc.click_detector as click_detector
 
@@ -47,6 +53,20 @@ class PorCCModel:
             raise Exception('This is not a valid Data Frame name')
 
         return df
+
+    
+    def hq_lq_separation(self, df, train_size=0.2):
+        """
+        Separate the df in hq_train, lq_train and test
+        """
+        train, self.test_df = model_selection.train_test_split(df, train_size=train_size)
+        self.train_hq_df = train[train['P'] != 2]
+        self.train_lq_df = train[train['P'] != 1]
+        self.train_hq_df['P'].replace(3, 0)
+        self.train_lq_df['P'].replace(3, 0)
+        self.train_lq_df['P'].replace(2, 1)
+
+        return self.train_hq_df, self.train_lq_df, self.test_df
 
 
     def load_model_from_config(self, configfile_path):
@@ -103,7 +123,7 @@ class PorCCModel:
             self.lq_params = X.columns
 
         print('The winning combination for %s is %s. AIC: %s' % (name, comb, aic))
-        print(mod.summary())
+        # print(mod.summary())
         return X.columns, mod
 
                 
@@ -128,60 +148,29 @@ class PorCCModel:
                 reg = logit.fit(X, y)
 
                 # Calculate AIC
-                prob = reg.predict_log_proba(X)
-                llk = np.sum(y*prob[:,1] + (1-y)*prob[:,0])
-                aic = 2*(len(comb)) - 2*(llk)
+                y_prob = reg.predict_proba(X)
+                aic = aic_score(y, y_prob, len(comb))
 
                 # Append the model
                 models.append([list(comb), reg, aic])
 
         return np.array(models)
 
-
-    def test_model(self, logreg, X, y):
-        """
-        Test the model with the test data 
-        """
-        # Compute accuracy
-        y_pred = logreg.predict(X)
-        accuracy = logreg.score(X, y)
-        print('Accuracy of logistic regression classifier on test set: {:.2f}'.format(accuracy))
-
-        # Compute confusion matrix
-        confusion_matrix = metrics.confusion_matrix(y, y_pred)
-        print(confusion_matrix)
-
-        # Plot ROC
-        logit_roc_auc = metrics.roc_auc_score(y, logreg.predict(X))
-        fpr, tpr, thresholds = metrics.roc_curve(y, logreg.predict_proba(X)[:,1])
-        plt.figure()
-        plt.plot(fpr, tpr, label='Logistic Regression (area = %0.2f)' % logit_roc_auc)
-        plt.plot([0, 1], [0, 1],'r--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver operating characteristic')
-        plt.legend(loc="lower right")
-        plt.savefig('Log_ROC')
-        plt.show()
-
-        return confusion_matrix
-
     
-    def save(self, path, extension):
+    def save(self, save_path):
         """
         Save the current models in a file. Can be chosen to save it as pickle or joblib
         """
-        if extension == 'pickle':
-            pickle.dump(self, open(path, 'wb'))
+        extension = save_path.split('.')[-1]
+        if extension == 'pkl':
+            pickle.dump(self, open(save_path, 'wb'))
         elif extension == 'joblib': 
-            joblib.dump(self, path)
+            joblib.dump(self, save_path)
         else:
             raise Exception('This extension is unknown!')
 
 
-    def calculate_clicks_params(self, df_name, fs, click_model_path, save=False):
+    def calculate_clicks_params(self, df_name, fs, click_model_path, save_path=None):
         """
         Add to the df the click parameters calculated by the Click Class
         """
@@ -196,8 +185,8 @@ class PorCCModel:
         df_clicks = converter.clicks_df(df)
         
         df_joint = df.join(df_clicks, lsuffix='_mat', rsuffix='')
-        if save:
-            df_joint.to_pickle('pyporcc/data/clicks_%s.pkl' % (df_name))
+        if save_path is not None:
+            df_joint.to_pickle(save_path)
 
         return df_joint
 
@@ -286,14 +275,14 @@ class PorCC:
         Classify according to the params [PF, CF, Q, XC, duration, ratio, BW]
         """
         # Add the independent variable for the regression
-        df['const'] = 1
+        df = df.assign(const=1)
 
         # Initialize the prediction column
-        df['pyPorCC'] = 0
+        df = df.assign(pyPorCC=0)
 
         # Evaluate the model on the given x
-        df['prob_hq'] = self.hq_mod.predict_proba(df[self.hq_params])[0][:,1]
-        df['prob_lq'] = self.lq_mod.predict_proba(df[self.lq_params])[0][:,1]
+        df = df.assign(prob_hq=self.hq_mod.predict_proba(df[self.hq_params])[0][:,1])
+        df = df.assign(prob_lq=self.lq_mod.predict_proba(df[self.lq_params])[0][:,1])
 
         # Decide
         loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
@@ -303,6 +292,38 @@ class PorCC:
         df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] <= self.th2), 'pyPorCC'] = 3            # N Clicks
 
         return df
+    
+    
+    def predict(self, df):
+        """
+        Classify and return the y value
+        """
+        y_pred = self.classify_matrix(df)['pyPorCC']
+
+        return y_pred    
+
+
+    def predict_proba(self, df):
+        """
+        Return the probablity of being classified as HQ or LQ
+        """
+        # Add the independent variable for the regression
+        df = df.assign(const=1)
+
+        # Initialize the prediction column
+        df = df.assign(prob=0)
+
+        # Evaluate the model on the given x
+        df = df.assign(prob_hq=self.hq_mod.predict_proba(df[self.hq_params])[:,1])
+        df = df.assign(prob_lq=self.lq_mod.predict_proba(df[self.lq_params])[:,1])
+
+        # Decide
+        loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
+        df.loc[~loc_idx, 'prob'] = 0                                                                         
+        df.loc[loc_idx & (df['prob_hq'] > self.th1), 'prob'] = df.loc[loc_idx & (df['prob_hq'] > self.th1), 'prob_hq']   
+        df.loc[loc_idx & (df['prob_hq'] < self.th1), 'prob'] = df.loc[loc_idx & (df['prob_hq'] < self.th1), 'prob_lq']                           
+
+        return df[['prob_hq', 'prob_lq', 'prob']]          
 
     
     def test_classification(self, test_df, col_name='ClassifiedAs'):
@@ -316,6 +337,63 @@ class PorCC:
 
         return error, predicted_df
 
+
+    def plot_roc_curves(self, df, dep_var='ManualAsign'):
+        """
+        Plot the ROC curves for HQ, LQ and All
+        """
+        fig, ax = plt.subplots(1, 3)
+        # Filter the data frame so it only has HQ-Noise, LQ-Noise and All-Noise
+        hq_noise = df.loc[df[dep_var] != 2]
+        lq_noise = df.loc[df[dep_var] != 1]
+        self._plot_roc_curves(df=hq_noise, dep_var=dep_var, ax0=ax[0])
+        ax[0].set_title('HQ vs Noise')
+        self._plot_roc_curves(df=lq_noise, dep_var=dep_var, ax0=ax[1])
+        ax[1].set_title('LQ vs Noise')
+        self._plot_roc_curves(df=df, dep_var=dep_var, ax0=ax[2])
+        ax[2].set_title('All vs Noise')
+
+        plt.tight_layout()
+        plt.show()
+        plt.close()
+
+
+    def _plot_roc_curves(self, df, dep_var='ManualAsign', ax0=None):
+        """`    
+        Plot the ROC curves for each part of the algorithm
+        """
+        y_test = self.convert2binary(df[dep_var])
+        if ax0 is None: 
+            fig, ax = plt.subplots()
+        else:
+            ax = ax0
+        probs = self.predict_proba(df)
+
+        # Plot ROC
+        fpr_hq, tpr_hq, thresholds = metrics.roc_curve(y_test, probs['prob_hq'], drop_intermediate=True)
+        fpr_lq, tpr_lq, thresholds = metrics.roc_curve(y_test, probs['prob_lq'], drop_intermediate=True)
+        fpr_all, tpr_all, thresholds = metrics.roc_curve(y_test, probs['prob'], drop_intermediate=True)
+
+        ax.plot(fpr_hq, tpr_hq, label='PorCC HQ')
+        ax.plot(fpr_lq, tpr_lq, label='PorCC LQ')
+        ax.plot(fpr_all, tpr_all, label='PorCC All')
+
+        if ax0 is None: 
+            plt.tight_layout()
+            plt.show()
+            plt.close()
+        
+        return ax
+
+
+    def convert2binary(self, y):
+        """
+        Return the y sample as binary (no porpoise / porpoise)
+        """
+        y = y.replace(3, 0)
+        y = y.replace(2, 1)  
+
+        return y
 
 
 class ManualLogit:
@@ -331,6 +409,7 @@ class ManualLogit:
         """
         Predict the classification of X
         """
+        X = preprocessing.StandardScaler(X)
         proba = self.predict_proba(X)[0][:,1]
         y_pred = np.zeros(proba.shape)
         y_pred[np.where(proba >= self.th_)] = 1
@@ -340,19 +419,47 @@ class ManualLogit:
     
     def predict_proba(self, X):
         """
-        Predict the probability
+        Predict the probability with the coefficients
         """
-        z = np.sum(X*self.coef_[1:], axis=1) + self.coef_[0]
-        prob_1 = 1/(1 + np.power(np.e, z))
-        prob = np.column_stack((prob_1, 1-prob_1))
+        lower_bnd = np.log(np.finfo(np.float64).eps)
+        upper_bnd = -lower_bnd
+        X_scale = preprocessing.scale(X)
+        Xb = np.array(np.sum(X_scale*self.coef_[1:], axis=1) + self.coef_[0])
+        odds = np.exp(-constrain(Xb, lower_bnd, upper_bnd))
+        prob_1 = 1 / (1 + odds)
+        prob = np.column_stack((1-prob_1, prob_1))
 
-        return [prob]
+        return prob
 
     
     def predict_log_proba(self, X):
         """
         Predict the log probability
         """
-        log_prob = np.log(self.predict_proba(X)[0])
+        prob = self.predict_proba(X)
+        log_prob = np.log(prob)
 
         return log_prob
+
+
+
+#### Util functions
+
+def aic_score(y, y_prob, n_features):
+    """
+    Return the AIC score
+    """
+    llk = np.sum(y*np.log(y_prob[:, 1]) + (1 - y)*np.log(y_prob[:,0]))
+    aic = 2*n_features - 2*(llk)
+    return aic
+
+
+def constrain(x,lower,upper):
+    """
+    MATLAB constrain 
+    Constrain between upper and lower limits, and do not ignore NaN
+    """
+    x[np.where(x < lower)[0]] = lower
+    x[np.where(x > upper)[0]] = upper
+
+    return x

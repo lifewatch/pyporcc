@@ -1,10 +1,14 @@
+import os
+import sys
 import pandas as pd
 
 import pyhydrophone as pyhy
 
+
 from pyporcc import porcc
 from pyporcc import porpoise_classifier
 from pyporcc import click_detector
+
 
 
 # Cosentino data
@@ -12,9 +16,9 @@ click_model_path = 'pyporcc/data/cosentino/standard_click.wav'
 fs_data = 500000
 
 # Data with the params already calculated
-train_hq_data_path = 'pyporcc/data/clicks_hq.pkl'
-train_lq_data_path = 'pyporcc/data/clicks_lq.pkl'
-test_data_path = 'pyporcc/data/clicks_test.pkl'
+train_hq_data_path = 'C:/Users/cleap/Documents/Data/Sound Data/Clicks/cosentino/porcc_params/clicks_hq.pkl'
+train_lq_data_path = 'C:/Users/cleap/Documents/Data/Sound Data/Clicks/cosentino/porcc_params/clicks_lq.pkl'
+test_data_path = 'C:/Users/cleap/Documents/Data/Sound Data/Clicks/cosentino/porcc_params/clicks_test.pkl'
 
 # Load data to train and thest the models
 df_hq = pd.read_pickle(train_hq_data_path)
@@ -47,7 +51,7 @@ def porcc_models(df_hq, df_lq, df_test):
     models.find_best_model('hq')
     models.find_best_model('lq')
 
-    models.save('pyporcc/models/porcc_models.pkl', 'pickle')
+    models.save('pyporcc/models/porcc_models.pkl')
 
     return models
 
@@ -73,7 +77,7 @@ if __name__ == "__main__":
     Start a PorCC study and apply the classifier to all the sound files 
     """
     # Train the model and save it
-    models_porcc = porcc_models(train_hq_data_path, train_lq_data_path, test_data_path)
+    models_porcc = porcc_models(df_hq, df_lq, df_test)
 
     models_list = ['svc', 'logit', 'forest', 'knn']
     models_custom = other_models(df_hq, df_lq, df_test, models_list)

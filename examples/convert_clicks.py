@@ -1,3 +1,5 @@
+import os
+import sys
 import pyhydrophone as pyhy
 
 from pyporcc import click_detector
@@ -20,9 +22,8 @@ hydrophone = pyhy.SoundTrapHF(name, model, serial_number, Vpp)
 # Click model
 click_model_path = 'pyporcc/data/standard_click.wav'
 
-
 # Output path for the detected clicks
-clicks_output_path = 'pyporcc/data/soundtrap_clicks.pkl'
+clicks_output_path = "C:/Users/cleap/Documents/Data/Sound Data/Clicks/soundtrap/soundtrap_clicks.pkl"
 
 
 

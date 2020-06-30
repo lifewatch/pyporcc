@@ -1,14 +1,16 @@
-import numpy as np
-import matplotlib.pyplot as plt 
 import os
-import datetime as dt
+import pickle
 import itertools
+import numpy as np
 import pandas as pd
-from scipy import signal as sig
+import datetime as dt
 import scipy.stats as stats
 import statsmodels.api as sm
+import matplotlib.pyplot as plt 
+
+
+from scipy import signal as sig
 from sklearn import metrics, linear_model, ensemble, svm, neighbors, pipeline, preprocessing, feature_selection, model_selection, utils
-import pickle
 
 
 
@@ -30,59 +32,24 @@ class PorpoiseClassifier:
         self.models = {}
 
 
-    def prepare_train_data(self, train_df):
+    def split_data(self, data_df, train_size=0.4):
         """
-        Change the labels to convert it to a binary problem but keep the HQ/LQ information 
+        Prepare train, test
         """
-        train_df['class'] = train_df['P'].replace(2, 1)
-        train_df['class'] = train_df['class'].replace(3, 0)
-        self.train_data = train_df
+        self.train_data, self.test_data = model_selection.train_test_split(data_df, train_size=train_size)
 
+        return self.train_data, self.test_data
+    
 
-    def prepare_test_data(self, test_df):
+    def split_2trainingsets(self, data_df, train_size=0.2):
         """
-        Change the labels to convert it to a binary problem but keep the HQ/LQ information
+        Prepare two training sets, one with HQ and the other one with LQ
         """
-        test_df['class'] = test_df['ManualAsign'].replace(2, 1)
-        test_df['class'] = test_df['class'].replace(3, 0)
-        self.test_data = test_df
-
-
-    def join_train_data(self, train_hq_df, train_lq_df):
-        """
-        Join the two training datasets to one to perform multiclass classification
-        """
-        train_hq_df['P'] = train_hq_df['P'].replace(0, 3)
-        train_lq_df['P'] = train_lq_df['P'].replace(0, 3)
-        train_lq_df['P'] = train_lq_df['P'].replace(1, 2)
-
-        # Join the two datasets
-        train_df = train_hq_df.append(train_lq_df, ignore_index=True)
-
-        return train_df
+        # TO BE IMPLEMENTED!
+        return 0
 
     
-    def join_and_split_data(self, train_hq_df, train_lq_df, test_df):
-        """
-        Join all the data sets and get a random separation of train/test
-        """
-        df = pd.DataFrame()
-        train_hq_df[self.dep_var] = train_hq_df[self.dep_var].replace(0, 3)
-        train_lq_df[self.dep_var] = train_lq_df[self.dep_var].replace(0, 3)
-        train_lq_df[self.dep_var] = train_lq_df[self.dep_var].replace(1, 2)
-        test_df.rename({'ManualAsign': 'P'})  
-
-        df = train_hq_df[self.dep_var].append(train_lq_df[self.dep_var], ignore_index=True)
-        df = df.append(test_df[self.ind_vars + [self.dep_var]], ignore_index=True)
-        df['class'] = df['P'].replace(2, 1)
-        df['class'] = df['class'].replace(3, 0)
-
-        self.train_data, self.test_data = model_selection.train_test_split(df, train_size=0.4)
-
-        return train_data, test_data
-
-    
-    def get_best_model(self, model_name, standarize=False, feature_sel=False):
+    def get_best_model(self, model_name, binary=False, standarize=False, feature_sel=False):
         """
         Train all the classifiers. The implemented ones are
         `svc`: Support Vector Machines 
@@ -90,9 +57,15 @@ class PorpoiseClassifier:
         `RandomForest`: Random Forest
         `knn`: K-Nearest Neighbor
 
-        """
+        binary : converts the variables to 0 / 1 (no porpoise / porpoise) instead of lq/hq clicks
+
+
+        """    
         X = self.train_data[self.ind_vars]
         y = self.train_data[self.dep_var]
+        if binary: 
+            # Convert the classes in 0 (no porpoise) or 1 (porpoise)
+            y = self.convert2binary(y)
 
         # If standarize is considered, append it to the pipeline steps
         steps = []
@@ -102,7 +75,7 @@ class PorpoiseClassifier:
             steps.append(('scaler', scaler))
         
         # Some common parameters
-        tol = 1e-4
+        tol = 1e-3
         gamma = utils.fixes.loguniform(1e-4, 1000)
         C_values = utils.fixes.loguniform(0.1, 1000)
         class_weight = ['balanced', None]
@@ -110,11 +83,12 @@ class PorpoiseClassifier:
         # Get the model
         if model_name == 'svc':
             # List all the possible parameters that want to be checked
-            kernel_list = ['poly', 'rbf']
+            kernel_list = ['poly', 'rbf'] 
             degree = stats.randint(1,4)
-            param_distr = {'kernel':kernel_list, 'degree':degree, 'C':C_values, 'gamma':gamma, 'class_weight':class_weight}
+            param_distr = {'degree':degree, 'C':C_values, 'gamma':gamma, 'kernel':kernel_list}
+            
             # Classifier with fixed values
-            clf = svm.SVC(tol=tol, cache_size=500, probability=True)
+            clf = svm.SVC(tol=tol, cache_size=500, probability=True, max_iter=500)
 
         elif model_name == 'logit':
             # List all the possible parameters that want to be checked
@@ -149,64 +123,135 @@ class PorpoiseClassifier:
             steps.append(('feature_selection', selection))
 
         # Search for the best parameters
-        gm_cv = model_selection.RandomizedSearchCV(estimator=clf, scoring='roc_auc', param_distributions=param_distr)
+        gm_cv = model_selection.RandomizedSearchCV(estimator=clf, scoring='roc_auc', param_distributions=param_distr, n_iter=100)
         steps.append(('classification', gm_cv))
 
         # Create pipeline and fit
         model = pipeline.Pipeline(steps)
         model.fit(X, y)
-        self.models[model_name] = model
+
+        if feature_sel:
+            ind_vars = model['feature_selection'].transform(self.test_data[self.ind_vars])
+        else: 
+            ind_vars = self.ind_vars
+
+        print(model['classification'].best_estimator_)
+        self.models[model_name] = {'ind_vars': ind_vars, 'model': model, 'binary':binary}
+        
+        # Save the model as a pickle file! 
+        pickle.dump(model, open('pyporcc/models/%s.pkl' % (model_name), 'wb'))
 
         return self.models[model_name]
 
     
-    def train_models(self, model_list, standarize=False, feature_sel=False, verbose=True):
+    def train_models(self, model_list, binary=False, standarize=False, feature_sel=False, verbose=True):
         """
         Train all the models of the list
         """
-        results = pd.DataFrame(columns=['name', 'roc_auc', 'recall', 'aic'])
         for model_name in model_list: 
-            self.get_best_model(model_name, standarize, feature_sel)
+            self.get_best_model(model_name, binary, standarize, feature_sel)
             
-            # Plot the results
-            y_test = self.test_data[self.dep_var]
-            y_pred = self.models[model_name].predict(self.test_data[self.ind_vars])
-            y_prob = self.models[model_name].predict_proba(self.test_data[self.ind_vars])
-            if feature_sel:
-                n_features = self.models[model_name]['feature_selection'].transform(self.test_data[self.ind_vars]).shape[1]
-            else: 
-                n_features = self.test_data[self.ind_vars].shape[1]
+        return self.models
+    
 
-            print(self.models[model_name]['classification'].best_estimator_)
+    def test_models(self):
+        """
+        Test the models
+        """
+        results = pd.DataFrame(columns=['name', 'roc_auc', 'recall', 'aic'])
+        for model_name, model_item in self.models.items(): 
+            ind_vars = model_item['ind_vars']     
+            model = model_item['model']       
+            y_test = self.test_data[self.dep_var]
+            if model_item['binary']:
+                # Convert the classes in 0 (no porpoise) or 1 (porpoise)
+                y_test = self.convert2binary(y_test)
+            y_pred = model.predict(self.test_data[ind_vars])
+            y_prob = model.predict_proba(self.test_data[ind_vars])
+
             print(metrics.classification_report(y_test, y_pred))
 
             # Calculate rou_aub, recall and aic
-            roc_aub = metrics.roc_auc_score(y_test, y_pred)
+            roc_auc = metrics.roc_auc_score(y_test, y_pred)
             recall = metrics.recall_score(y_test, y_pred)
-            aic = aic_score(y_test, y_prob, n_features)
-            results.loc[results.size] = [model_name, roc_aub, recall, aic]
+            aic = aic_score(y_test, y_prob, len(ind_vars))
+            results.loc[results.size] = [model_name, roc_auc, recall, aic]
         
         print(results)
+        return results  
 
-    
 
-    def train_cnn(self):
+    def plot_roc_curves(self, porcc_al):
         """
-        Train a CNN 
+        Plot the roc curves for HQ vs Noise, LQ vs Noise and All vs Noise
         """
-        return 0
+        fig, ax = plt.subplots(1, 3)
+        hq_noise = self.test_data.loc[self.test_data[self.dep_var] != 2]
+        lq_noise = self.test_data.loc[self.test_data[self.dep_var] != 1]
+        self._plot_roc_curves(porcc_al=porcc_al, df=hq_noise, ax=ax[0])
+        ax[0].set_title('HQ vs Noise')
+        self._plot_roc_curves(porcc_al=porcc_al, df=lq_noise, ax=ax[1])
+        ax[1].set_title('LQ vs Noise')
+        self._plot_roc_curves(porcc_al=porcc_al, df=self.test_data, ax=ax[2])
+        ax[2].set_title('All vs Noise')
+
+        plt.tight_layout()
+        plt.show()
+        plt.close()
 
 
-    def save(self, path, extension):
+    def _plot_roc_curves(self, porcc_al, df, ax):
+        """
+        Plot the roc curves of all the models 
+        """
+        y_test = df[self.dep_var]
+        for model_name, model_item in self.models.items():
+            ind_vars = model_item['ind_vars']     
+            model = model_item['model']  
+            X_test = df[ind_vars]
+            if model_item['binary']:
+                # Convert the classes in 0 (no porpoise) or 1 (porpoise)
+                y_test = self.convert2binary(y_test)
+            y_prob = model.predict_proba(X_test)[:,1]
+            fpr, tpr, thresholds = metrics.roc_curve(y_test, y_prob)
+            ax.plot(fpr, tpr, label=model_name)
+        
+        porcc_prob = porcc_al._plot_roc_curves(df, dep_var=self.dep_var, ax0=ax)
+
+        ax.set_xlabel('False alarm rate')
+        ax.set_ylabel('Hit rate')
+
+        ax.legend()
+
+        return ax
+
+
+    def convert2binary(self, y):
+        """
+        Return the y sample as binary (no porpoise / porpoise)
+        """
+        y = y.replace(3, 0)
+        y = y.replace(2, 1)  
+
+        return y
+
+
+    def add_model(self, model_name, model, ind_vars, binary=False):
+        """
+        Add a model to the models dict
+        """
+        self.models[model_name] = {'ind_vars':ind_vars, 'model':model, 'binary':binary}   
+
+
+    def save(self, path):
         """
         Save the current models in a file. Can be chosen to save it as pickle or joblib
         """
-        if extension == 'pickle':
+        extension = path.split('.')[-1]
+        if extension == 'pkl':
             pickle.dump(self, open(path, 'wb'))
-        elif extension == 'joblib': 
-            joblib.dump(self, path)
         else:
-            raise Exception('This extension is unknown!')
+            raise Exception('The %s extension is unknown!' % (extension))
 
 
     def classify_click(self, click):
@@ -234,16 +279,6 @@ class PorpoiseClassifier:
 
         return df
 
-    
-    def test_classification_vs_matlab(self, test_df):
-        """
-        Test the algorithm. With the same parameters, test the prediction output of the algorithm
-        """
-        predicted_df = self.classify_matrix(test_df)
-
-        error = np.sum(test_df['ClassifiedAs'] != predicted_df['pyPorCC'])/len(test_df)
-
-        return error, predicted_df
 
 
 def aic_score(y, y_prob, n_features):

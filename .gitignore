@@ -4,4 +4,5 @@ __pycache__
 *.csv
 *.json
 *.mat
+*.m
 cosentino/

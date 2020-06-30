@@ -1,17 +1,17 @@
-import math 
-import numpy as np
-import matplotlib.pyplot as plt 
 import os
-import configparser
+import math 
+import zipfile
+import numpy as np
+import configparse
+import numba as nb
+import pandas as pd
 import datetime as dt
+import soundfile as sf
+import matplotlib.pyplot as plt 
+
+
 from scipy.io import wavfile as siowavfile
 from scipy import signal as sig
-import soundfile as sf
-import pandas as pd
-import numba as nb
-import zipfile
-
-
 
 
 class ClickDetector:
@@ -291,6 +291,13 @@ class Click:
         else:
             self.fs = fs
 
+        # [PSD,f] = periodogram(click,[],FFT,Fs,'power');
+        # %psd=abs(fft(click))
+        # PSD = PSD./max(PSD); % normalize spectrum
+        # CF = sum(f.*PSD.^2)./sum(PSD.^2);
+        # [~,indfc] = max(PSD);
+        # PF = f(indfc); 
+
         # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file 
         # window = sig.get_window('boxcar', self.nfft)
         window = sig.get_window('boxcar', 0)
@@ -302,6 +309,7 @@ class Click:
         self.pf = self.freq[psd.argmax()]    
 
         # Calculate RMSBW
+        # BW = (sqrt(sum((f-CF).^2.*PSD.^2 ) / sum(PSD.^2)))/1000; 
         self.rmsbw = (np.sqrt((np.sum(((self.freq - self.cf)**2) * (self.psd**2))) / np.sum(self.psd**2))) / 1000.0 
 
         # Calculate click duration based on Madsen & Walhberg 2007 - 80#
@@ -336,7 +344,7 @@ class Click:
                 break
             else:
                 i_right = max_freq_i + i
-                
+
         self.bw = (self.freq[i_right] - self.freq[i_left])/1000.0
 
         # Calculate the correlation with the model
@@ -359,6 +367,7 @@ class Click:
 
 
 
+
 class ClickConverter:
     def __init__(self, click_model_path, click_vars=None):
         """
@@ -376,12 +385,9 @@ class ClickConverter:
         Find all the clicks and return them as a df with all the clicks params
         df needs to have at least datetime and wave
         """
-        # Start a new dataframe
-        df_clicks = pd.DataFrame()
-
         # Calculate all the independent variables and append them to the df
         for var in self.click_vars:
-            df_clicks[var] = 0.00
+            df[var] = 0.00
 
         for idx in df.index:
             signal = df.loc[idx, 'wave']
@@ -389,21 +395,21 @@ class ClickConverter:
             values = []
             for var in self.click_vars:
                 values.append(getattr(click, var))
-            df_clicks.loc[idx, self.click_vars] = values
+            df.loc[idx, self.click_vars] = values
         
         # Keep the metadata
-        df_clicks.fs = df.fs 
+        df.fs = df.fs 
 
         if save:
             extension = save_path.split('.')[-1]
             if extension == 'json':
-                df_clicks.to_json(save_path)
+                df.to_json(save_path)
             elif extension == 'pkl':
-                df_clicks.to_pickle(save_path)
+                df.to_pickle(save_path)
             else:
                 raise Exception('The extension %s is unkown' % (extension))
 
-        return df_clicks
+        return df
 
 
     def test_click_calculation(self, df_clicks, df_test, col_vars):

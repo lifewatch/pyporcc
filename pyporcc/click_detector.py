@@ -15,7 +15,8 @@ from scipy import signal as sig
 
 
 class ClickDetector:
-    def __init__(self, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10, min_separation=100, max_length=1024, pre_samples=40, post_samples=40, fs=500000, prefilter=None, dfilter=None):
+    def __init__(self, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10, min_separation=100,
+                 max_length=1024, pre_samples=40, post_samples=40, fs=500000, prefilter=None, dfilter=None):
         """
         Process to detect clicks
         """

@@ -5,7 +5,6 @@ from sklearn import model_selection
 
 from pyporcc import porcc
 
-
 # Cosentino Model
 models_config_path = 'pyporcc/models/log_models.ini'
 

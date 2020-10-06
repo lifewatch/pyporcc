@@ -1,10 +1,25 @@
 # PyPorCC
 
-Adapted code to python from the paper: 
+PyPorCC is a package that allows the classification of Harbor Porpoises' clicks.
+There is implemented the algorithm PorCC, adapted to python from the paper: 
 > Cosentino, M., Guarato, F., Tougaard, J., Nairn, D., Jackson, J. C., & Windmill, J. F. C. (2019). 
 > Porpoise click classifier (PorCC): A high-accuracy classifier to study harbour porpoises ( Phocoena phocoena ) in the wild . 
 > The Journal of the Acoustical Society of America, 145(6), 3427–3434. https://doi.org/10.1121/1.5110908
 
+And also other models can be trained. The implemented ones so far are: 
+* `svc`: Support Vector Machines
+* `lsvc`: Linear Support Vector Machines
+* `RandomForest`: Random Forest
+* `knn`: K-Nearest Neighbor
+
+And can be trained on DataFrames containing waves (clips) of possible clicks. 
+
+The package also provides an adapted alternative to PAMGuard's click detector that using a filter and a trigger 
+function selects clips that can potentially be clicks (high enery in the right frequency band)
+
+## Note
+
+This package is not yet ready to use! Some tests for the click detector have to be done still.
 
 ## INFORMATION ABOUT PYTHON FILES
 - click_detector.py: read sound files and create click cuttings out of it
@@ -52,6 +67,7 @@ Fields:
 - *ManualAsign*: class to which the signals were manually assigned
 - *ClassifiedAs*: class assigned by PorCC
 
-Please note, the clicks PAMGuard's Click Classifiery classified as porpoise clicks appear as 0 in both ClassifiedAs and ManualAsign fields. 
+Please note, the clicks PAMGuard's Click Classifier classified as porpoise clicks appear as 0 in both ClassifiedAs 
+and ManualAsign fields. 
 
 The equivalent files in pickle extension are the mat structures saved in a faster-to-read format for python. 

@@ -1,18 +1,17 @@
-import os
-import sys
-import pandas as pd
 
 from pyporcc import porcc
 
+import pandas as pd
+
 
 # Cosentino Model
-models_config_path = 'pyporcc/models/log_models.ini'
+models_config_path = '../pyporcc/models/log_models.ini'
 
 # Already trained models 
-models_trained_path = 'pyporcc/models/porcc_models.pkl'
+models_trained_path = '../pyporcc/models/porcc_models.pkl'
 
 # Data to classify
-test_data_path = 'C:/Users/cleap/Documents/Data/Sound Data/Clicks/cosentino/porcc_params/clicks_test.pkl'
+test_data_path = 'test.pkl'
 
 
 def load_porcc_classifier_coef(config_file):
@@ -40,9 +39,10 @@ if __name__ == "__main__":
     """
     # Load the classifier (choose one)
     porcc_al_coef = load_porcc_classifier_coef(config_file=models_config_path)
-    porcc_al_trained = load_porcc_classifier_trained(models_trained_path)
+    # porcc_al_trained = load_porcc_classifier_trained(models_trained_path)
 
-    # Load data 
+    # Load data
     clicks_df = pd.read_pickle(test_data_path)
-    classification_trained = porcc_al_trained.classify_matrix(clicks_df)
+    # classification_trained = porcc_al_trained.classify_matrix(clicks_df)
     classification_coef = porcc_al_coef.classify_matrix(clicks_df)
+    print('hello')

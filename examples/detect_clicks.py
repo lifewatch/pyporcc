@@ -1,5 +1,4 @@
-import os
-import sys
+
 import pyhydrophone as pyhy
 
 from pyporcc import click_detector
@@ -8,16 +7,14 @@ from pyporcc import click_detector
 ############## CONFIG
 
 # Sound Files
-sound_folder_path = "C:/Users/cleap/Documents/Data/Sound Data/Seiche/AutonautTest"
+sound_folder_path = "C:/Users/cleap/Documents/Data/Sound Data/SoundTrap/COVID-19/67416073.200427 Zeekat"
 
 
 # Hydrophone 
-name = 'Seiche'
-model = 'uPam'
-sensitivity = -196.0
-preamp_gain = 0.0
-Vpp = 2.0
-hydrophone = pyhy.Seiche(name, model, sensitivity, preamp_gain, Vpp)
+model = 'ST300HF'
+name = 'SoundTrap'
+serial_number = 67416073
+soundtrap = pyhy.soundtrap.SoundTrap(name=name, model=model, serial_number=serial_number)
 
 
 # Filters parameters
@@ -39,9 +36,8 @@ if __name__ == "__main__":
     """
     # Run on sound data
     cd = click_detector.ClickDetector()
-    cd.get_click_clips(hydrophone, sound_folder_path)
+    clicks_df = cd.get_click_clips(soundtrap, sound_folder_path)
 
     # Convert the sound clips to click and save
-    clicks_df = cd.clicks_df(click_model_path)
     converter = click_detector.ClickConverter(click_model_path)
     clicks = converter.clicks_df(clicks_df, save=True, save_path=clicks_output_path)

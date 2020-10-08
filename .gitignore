@@ -8,3 +8,4 @@ __pycache__
 *.m
 cosentino/
 examples/
+*.wav

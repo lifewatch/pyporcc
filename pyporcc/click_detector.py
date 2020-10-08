@@ -6,10 +6,20 @@ Institution : VLIZ (Vlaams Instituut voor de Zee)
 Last Accessed : 9/23/2020
 """
 
+__author__ = "Clea Parcerisas"
+__version__ = "0.1"
+__credits__ = "Clea Parcerisas"
+__email__ = "clea.parcerisas@vliz.be"
+__status__ = "Development"
+
+from pyporcc import utils
+
 import os
 import zipfile
+import pathlib
 import numpy as np
 import numba as nb
+import pandas as pd
 import datetime as dt
 import soundfile as sf
 import matplotlib.pyplot as plt 
@@ -19,8 +29,9 @@ from scipy import signal as sig
 
 
 class ClickDetector:
-    def __init__(self, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10, min_separation=100,
-                 max_length=1024, pre_samples=40, post_samples=40, fs=500000, prefilter=None, dfilter=None):
+    def __init__(self, hydrophone=None, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10,
+                 min_separation=100, max_length=1024, pre_samples=40, post_samples=40, fs=576000,
+                 prefilter=None, dfilter=None):
         """
         Process to detect clicks
         Trigger decision
@@ -30,6 +41,8 @@ class ClickDetector:
         the clip is sent to the localisation and classification modules.
         Parameters
         ----------
+        hydrophone : hydrophone object
+            Object representing a hydrophone from pyhydrophone
         long_filt : float
             Long filter (used when no click is active)
         long_filt2 : float
@@ -61,6 +74,7 @@ class ClickDetector:
             Filter to apply for the trigger.
             If set to None, a high-pass Butterworth [20000, :] 4th order filter will be used
         """
+        self.hydrophone = hydrophone
         # Detector parameters
         self.pre_samples = pre_samples
         self.post_samples = post_samples
@@ -83,7 +97,8 @@ class ClickDetector:
             self.dfilter = dfilter
 
         # Dictionary with all the clips
-        self.clips = {}
+        self.clips = pd.DataFrame(columns=['datetime', 'start_sample', 'wave', 'amplitude'])
+        self.clips = self.clips.set_index('datetime')
 
     def __setitem__(self, key, value):
         """
@@ -111,7 +126,7 @@ class ClickDetector:
 
         return xi
 
-    def add_click_clips(self, sound_file, date, block_start_sample, clips_list):
+    def add_click_clips(self, sound_file, block_start_sample, clips_list):
         """
         Add all the clips list to the dictionary
 
@@ -119,17 +134,15 @@ class ClickDetector:
         ----------
         sound_file : SoundFile object
             Where the file to be computed is stored
-        date : datetime
-            Start datetime of the file
         block_start_sample : int
             Number of sample of the first sample of the block
         clips_list : list of tuples
             List containing all the clips of clicks as [start_sample, duration] in samples
         """
         for clip in clips_list:
-            self.add_click_clip(sound_file, date, block_start_sample+clip[0], clip[1])
+            self.add_click_clip(sound_file, block_start_sample+clip[0], clip[1])
 
-    def add_click_clip(self, sound_file, date, start_sample, duration_samples=0, verbose=False):
+    def add_click_clip(self, sound_file, start_sample, duration_samples=0, verbose=False):
         """
         Add the clip to the clip dictionary
 
@@ -137,8 +150,6 @@ class ClickDetector:
         ----------
         sound_file : SoundFile object
             Where the file to be computed is stored
-        date : datetime
-            Start datetime of the file
         start_sample : int
             Number of sample of the first sample of the click
         duration_samples : int
@@ -146,6 +157,7 @@ class ClickDetector:
         verbose : bool
             Set to True if plots are wanted
         """
+        date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name)
         timestamp = date + dt.timedelta(seconds=start_sample/sound_file.samplerate)
 
         # Read the clip 
@@ -156,7 +168,9 @@ class ClickDetector:
         
         # Filter the clip and add it to the dictionary
         filtered_clip = sig.sosfilt(self.dfilter, clip)
-        self.clips[timestamp] = (start_sample, filtered_clip)
+        amplitude = utils.amplitude_db(filtered_clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
+                                       self.hydrophone.Vpp)
+        self.clips.at[timestamp] = {'start_sample': start_sample, 'wave': filtered_clip, 'amplitude': amplitude}
 
         if verbose:
             fig, ax = plt.subplots(2, 1)
@@ -166,7 +180,9 @@ class ClickDetector:
             plt.show()
             plt.close()
 
-    def detect_click_clips_file(self, sound_file_path, date, blocksize=2048):
+        print(len(self.clips))
+
+    def detect_click_clips_file(self, sound_file_path, blocksize=2048):
         """
         Return the possible clips containing clicks
 
@@ -174,8 +190,6 @@ class ClickDetector:
         ----------
         sound_file_path : string or Path
             Where the file to be computed is stored
-        date : datetime
-            Start datetime of the file
         blocksize : int
             Number of samples to process at a time
         """
@@ -207,19 +221,17 @@ class ClickDetector:
 
             # Read samples one by one, apply filter
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
-            self.add_click_clips(sound_file, date, block_n*blocksize, clips)
+            self.add_click_clips(sound_file, block_n*blocksize, clips)
 
             # plt.plot(prefilter_sig, label='Filtered')
             # plt.show()
 
-    def get_click_clips(self, hydrophone, folder_path, zip_mode=False):
+    def get_click_clips(self, folder_path, zip_mode=False):
         """
         Go through all the sound files and create a database with the detected clicks.
 
         Parameters
         ----------
-        hydrophone : hydrophone object
-            Object representing a hydrophone from pyhydrophone
         folder_path : string or Path
             Where all the files are
         zip_mode : bool
@@ -242,9 +254,7 @@ class ClickDetector:
                         wav_file = day_folder_path.open(file_name)
                     else:
                         wav_file = os.path.join(day_folder_path, file_name)
-                    date = hydrophone.get_name_datetime(file_name)
-                    self.detect_click_clips_file(wav_file, date)
-
+                    self.detect_click_clips_file(wav_file)
         return self.clips
 
 

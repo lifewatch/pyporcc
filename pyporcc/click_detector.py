@@ -31,7 +31,7 @@ from scipy import signal as sig
 class ClickDetector:
     def __init__(self, hydrophone=None, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10,
                  min_separation=100, max_length=1024, pre_samples=40, post_samples=40, fs=576000,
-                 prefilter=None, dfilter=None):
+                 prefilter=None, dfilter=None, save_max=np.inf, save_folder='.'):
         """
         Process to detect clicks
         Trigger decision
@@ -73,6 +73,8 @@ class ClickDetector:
         dfilter : filter output from scipy
             Filter to apply for the trigger.
             If set to None, a high-pass Butterworth [20000, :] 4th order filter will be used
+        save_max : int
+            Maximum number of clicks to save in a file
         """
         self.hydrophone = hydrophone
         # Detector parameters
@@ -96,9 +98,11 @@ class ClickDetector:
         else:
             self.dfilter = dfilter
 
-        # Dictionary with all the clips
-        self.clips = pd.DataFrame(columns=['datetime', 'start_sample', 'wave', 'amplitude'])
+        # DataFrame with all the clips
+        self.clips = pd.DataFrame(columns=['datetime', 'start_sample', 'duration', 'amplitude', 'filename', 'wave'])
         self.clips = self.clips.set_index('datetime')
+        self.save_max = save_max
+        self.save_folder = pathlib.Path(save_folder)
 
     def __setitem__(self, key, value):
         """
@@ -126,30 +130,51 @@ class ClickDetector:
 
         return xi
 
-    def add_click_clips(self, sound_file, block_start_sample, clips_list):
+    def save_clips(self):
+        """
+        Save the clips in a file
+        """
+        clips_filename = self.save_folder.joinpath('Detected_Clips_%s.csv' % self.clips.iloc[0].start_sample)
+        self.clips[['start_sample', 'duration', 'amplitude', 'filename']].to_csv(clips_filename)
+        self.clips = pd.DataFrame(columns=['datetime', 'start_sample', 'duration', 'amplitude', 'filename', 'wave'])
+
+    def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
         """
         Add all the clips list to the dictionary
 
         Parameters
         ----------
+        start_sample : int
+            Sample of the file where the block starts
+        blocksize : int
+            Number of frames to read in the block
         sound_file : SoundFile object
-            Where the file to be computed is stored
-        block_start_sample : int
-            Number of sample of the first sample of the block
+            File where the information is stored
         clips_list : list of tuples
             List containing all the clips of clicks as [start_sample, duration] in samples
         """
+        sound_file.seek(start_sample)
+        signal = sound_file.read(frames=blocksize)
+        date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name)
+        date += dt.timedelta(seconds=start_sample/sound_file.samplerate)
+        # Filter the signal
+        filtered_signal = sig.sosfilt(self.dfilter, signal)
         for clip in clips_list:
-            self.add_click_clip(sound_file, block_start_sample+clip[0], clip[1])
+            self.add_click_clip(filtered_signal, sound_file, date, start_sample, clip[0], clip[1])
 
-    def add_click_clip(self, sound_file, start_sample, duration_samples=0, verbose=False):
+    def add_click_clip(self, signal, sound_file, date, start_sample_block, start_sample,
+                       duration_samples=0, verbose=False):
         """
         Add the clip to the clip dictionary
 
         Parameters
         ----------
+        signal : np.array
+            Signal in the processed block
         sound_file : SoundFile object
-            Where the file to be computed is stored
+            Sound file where the clip is stored
+        date : datetime.datetime
+            Datetime where the signal starts
         start_sample : int
             Number of sample of the first sample of the click
         duration_samples : int
@@ -157,32 +182,32 @@ class ClickDetector:
         verbose : bool
             Set to True if plots are wanted
         """
-        date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name)
+
         timestamp = date + dt.timedelta(seconds=start_sample/sound_file.samplerate)
 
         # Read the clip 
         istart = max(0, start_sample - self.pre_samples)
-        frames = min(start_sample - istart + duration_samples + self.post_samples, sound_file.frames)
-        sound_file.seek(istart)
-        clip = sound_file.read(frames=frames, always_2d=True)[:, 0]
-        
-        # Filter the clip and add it to the dictionary
-        filtered_clip = sig.sosfilt(self.dfilter, clip)
-        amplitude = utils.amplitude_db(filtered_clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
-                                       self.hydrophone.Vpp)
-        self.clips.at[timestamp] = {'start_sample': start_sample, 'wave': filtered_clip, 'amplitude': amplitude}
+        frames = min(start_sample - istart + duration_samples + self.post_samples, signal.size)
+        clip = signal[istart:istart+frames]
 
+        amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
+                                       self.hydrophone.Vpp)
+        self.clips.at[timestamp] = {'start_sample': start_sample_block + start_sample, 'wave': clip,
+                                    'duration': duration_samples, 'amplitude': amplitude,
+                                    'filename': pathlib.Path(sound_file.name).name}
         if verbose:
             fig, ax = plt.subplots(2, 1)
             ax[0].plot(clip, label='Signal not filtered')
-            ax[1].plot(filtered_clip, label='Filtered signal')
+            ax[1].plot(clip, label='Filtered signal')
             plt.tight_layout()
             plt.show()
             plt.close()
 
         print(len(self.clips))
+        if len(self.clips) >= self.save_max:
+            self.save_clips()
 
-    def detect_click_clips_file(self, sound_file_path, blocksize=2048):
+    def detect_click_clips_file(self, sound_file_path, blocksize=None):
         """
         Return the possible clips containing clicks
 
@@ -191,7 +216,9 @@ class ClickDetector:
         sound_file_path : string or Path
             Where the file to be computed is stored
         blocksize : int
-            Number of samples to process at a time
+            Number of samples to process at a time, if None it will be the length of the file.
+            If the blocksize is too small (smaller than 1 period of the lowest frequency of the filter)
+            it will affect the results
         """
         # Open file
         sound_file = sf.SoundFile(sound_file_path, 'r')
@@ -200,15 +227,11 @@ class ClickDetector:
         if sound_file.samplerate != self.fs: 
             self.fs = sound_file.samplerate
 
+        if blocksize is None:
+            blocksize = sound_file.frames
+
         # Start the filter conditions
         zi = sig.sosfilt_zi(self.prefilter)
-
-        # Initialize the values of Si and Ni using the first block
-        first_block = sound_file.read(frames=blocksize, always_2d=True)[:, 0]
-        zi = first_block.mean() * zi
-        filtered_first_block, zi = sig.sosfilt(self.prefilter, first_block, zi=zi)
-        zi = first_block.mean() * zi
-        self.triggerfilter.initialize_sn(filtered_first_block)
 
         # Initialize the clicks count
         n_on = 0
@@ -221,10 +244,9 @@ class ClickDetector:
 
             # Read samples one by one, apply filter
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
-            self.add_click_clips(sound_file, block_n*blocksize, clips)
-
-            # plt.plot(prefilter_sig, label='Filtered')
-            # plt.show()
+            self.add_click_clips(block_n*blocksize, blocksize, sound_file, clips)
+        # Save the last detected clips
+        self.save_clips()
 
     def get_click_clips(self, folder_path, zip_mode=False):
         """
@@ -408,7 +430,7 @@ class TriggerFilter:
 
 
 class Click:
-    def __init__(self, sound_block, fs, timestamp, click_model_path, nfft=512, verbose=False):
+    def __init__(self, sound_block, fs, timestamp, click_model_path, nfft=64, verbose=False):
         """
         Start a porpoise click object
 
@@ -454,7 +476,7 @@ class Click:
         self.freq, psd = sig.periodogram(x=sound_block, window=window, fs=self.fs, scaling='spectrum')
 
         # Normalize spectrum
-        self.psd = psd / psd.max()
+        self.psd = psd / np.max(psd)
         self.cf = np.sum(self.freq * (psd**2)) / np.sum(psd**2)
         self.pf = self.freq[psd.argmax()]    
 
@@ -481,7 +503,7 @@ class Click:
         self.ratio = self.pf / self.cf
         
         # Calculate -3dB bandwith: Consecutive frequencies of the psd that have more than half of the maximum freq power
-        half = psd.max() / (10 ** (3/10.0))
+        half = np.max(psd) / (10 ** (3/10.0))
         max_freq_i = psd.argmax()
         i_left, i_right = 0, 0
         for i in np.arange(0, max_freq_i):
@@ -500,7 +522,7 @@ class Click:
 
         # Calculate the correlation with the model
         x_coeff = np.correlate(self.sound_block, self.click_model, mode='same')
-        self.xc = x_coeff.max()
+        self.xc = np.max(x_coeff)
 
         if verbose:
             fig, ax = plt.subplots(2, 1)

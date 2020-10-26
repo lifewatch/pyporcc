@@ -6,6 +6,7 @@ import pyhydrophone as pyhy
 import matplotlib.pyplot as plt
 
 from pyporcc import click_detector
+from pyporcc import porcc
 
 
 # CONFIG
@@ -29,16 +30,15 @@ lowcutfreq = 100e3              # Lowcut frequency
 highcutfreq = 160e3             # Highcut frequency
 min_separation_time = 0.1
 
-# Click model
-click_model_path = '../pyporcc/data/standard_click.wav'
-
 
 if __name__ == "__main__":
     """
     Detect clicks on sound data
     """
+    classifier = porcc.PorCC(load_type='manual', config_file='../pyporcc/models/log_models.ini')
     # Run on sound data
-    cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder)
+    cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=100, convert=True,
+                                      classifier=classifier)
     cd.detect_click_clips_file(sound_file_path, blocksize=60*500000)
     df_py = cd.clips[['start_sample', 'amplitude']]
 
@@ -58,6 +58,3 @@ if __name__ == "__main__":
     ax[1].set_xlabel('Samples')
     plt.show()
     print('hello!')
-    # Convert the sound clips to click and save
-    # converter = click_detector.ClickConverter(click_model_path)
-    # clicks = converter.clicks_df(df_py, save=True, save_path=clicks_output_path)

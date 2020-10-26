@@ -108,8 +108,7 @@ class PorCCModel:
         configfile_path : string or Path
             .ini file where the coefficients of the LQ and the HQ models are specified
         """
-        config = configparser.ConfigParser()
-        config.read(configfile_path)
+        config = configparser.ConfigParser().read(configfile_path)
 
         logitcoef_hq = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(np.float)
         logitcoef_lq = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(np.float)
@@ -354,14 +353,12 @@ class PorCC:
             DataFrame to be classified. Parameters PF, CF, Q, XC, duration, ratio and BW must be specified
         """
         # Add the independent variable for the regression
-        df = df.assign(const=1)
-
         # Initialize the prediction column
-        df = df.assign(pyPorCC=0)
+        df = df.assign(const=1, pyPorCC=0)
 
         # Evaluate the model on the given x
-        df = df.assign(prob_hq=self.hq_mod.predict_proba(df[self.hq_params])[:, 1])
-        df = df.assign(prob_lq=self.lq_mod.predict_proba(df[self.lq_params])[:, 1])
+        df = df.assign(prob_hq=self.hq_mod.predict_proba(df[self.hq_params])[:, 1],
+                       prob_lq=self.lq_mod.predict_proba(df[self.lq_params])[:, 1])
 
         # Decide
         loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
@@ -571,8 +568,3 @@ class ManualLogit:
         log_prob = np.log(prob)
 
         return log_prob
-
-
-
-
-

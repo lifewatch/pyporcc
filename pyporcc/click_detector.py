@@ -22,16 +22,17 @@ import numba as nb
 import pandas as pd
 import datetime as dt
 import soundfile as sf
+from importlib import resources
 import matplotlib.pyplot as plt 
 
-from scipy.io import wavfile as siowavfile
 from scipy import signal as sig
 
 
 class ClickDetector:
     def __init__(self, hydrophone=None, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10,
                  min_separation=100, max_length=1024, pre_samples=40, post_samples=40, fs=576000,
-                 prefilter=None, dfilter=None, save_max=np.inf, save_folder='.'):
+                 prefilter=None, dfilter=None, save_max=np.inf, save_folder='.',
+                 convert=False, click_model_path=None, classifier=None):
         """
         Process to detect clicks
         Trigger decision
@@ -75,6 +76,10 @@ class ClickDetector:
             If set to None, a high-pass Butterworth [20000, :] 4th order filter will be used
         save_max : int
             Maximum number of clicks to save in a file
+        save_folder : string or Path
+            Folder where to save the click output
+        classifier : classifier object
+            Classifier used to classify the snippets. Needs to have a classify_click function
         """
         self.hydrophone = hydrophone
         # Detector parameters
@@ -104,6 +109,20 @@ class ClickDetector:
         self.save_max = save_max
         self.save_folder = pathlib.Path(save_folder)
 
+        self.classifier = classifier
+        if classifier is not None:
+            if self.check_classifier(classifier):
+                self.clips['class_type'] = None
+            else:
+                raise TypeError('This classifier does not have a function to classify clicks!')
+        if convert:
+            if click_model_path is None:
+                with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
+                    print('Setting the click model path to default...')
+            self.converter = ClickConverter(click_model_path=click_model_path)
+            for var in self.converter.click_vars:
+                self.clips[var] = None
+
     def __setitem__(self, key, value):
         """
         If the sampling frequency of the sound is different than the one from the filters, update the filters 
@@ -115,6 +134,12 @@ class ClickDetector:
                 wn_d = 20000
                 self.dfilter = sig.butter(N=4, Wn=wn_d, btype='high', analog=False, output='sos', fs=value)
         self.__dict__[key] = value         
+
+    @staticmethod
+    def check_classifier(classifier):
+        if hasattr(classifier, 'classify_click'):
+            return True
+        return False
 
     def pre_filter(self, xn):
         """
@@ -135,8 +160,8 @@ class ClickDetector:
         Save the clips in a file
         """
         clips_filename = self.save_folder.joinpath('Detected_Clips_%s.csv' % self.clips.iloc[0].start_sample)
-        self.clips[['start_sample', 'duration', 'amplitude', 'filename']].to_csv(clips_filename)
-        self.clips = pd.DataFrame(columns=['datetime', 'start_sample', 'duration', 'amplitude', 'filename', 'wave'])
+        self.clips.drop(columns=['wave']).to_csv(clips_filename)
+        self.clips.drop(index=self.clips.index, inplace=True)
 
     def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
         """
@@ -175,6 +200,8 @@ class ClickDetector:
             Sound file where the clip is stored
         date : datetime.datetime
             Datetime where the signal starts
+        start_sample_block : int
+            First sample of the block according to the whole file
         start_sample : int
             Number of sample of the first sample of the click
         duration_samples : int
@@ -195,6 +222,10 @@ class ClickDetector:
         self.clips.at[timestamp] = {'start_sample': start_sample_block + start_sample, 'wave': clip,
                                     'duration': duration_samples, 'amplitude': amplitude,
                                     'filename': pathlib.Path(sound_file.name).name}
+        if self.classifier is not None:
+            click_row = self.converter.convert_row(self.clips.loc[timestamp], fs=sound_file.samplerate)
+            click_type = self.classifier.classify_row(click_row)
+            self.clips.at[timestamp, 'class_type'] = click_type
         if verbose:
             fig, ax = plt.subplots(2, 1)
             ax[0].plot(clip, label='Signal not filtered')
@@ -453,7 +484,7 @@ class Click:
         self.fs = fs
         self.sound_block = sound_block
         self.timestamp = timestamp
-        fs_model, self.click_model = siowavfile.read(click_model_path)
+        self.click_model, fs_model = sf.read(click_model_path)
         if fs_model != fs: 
             if verbose:
                 print('This click is not recorded at the same frequency than the classified data! '
@@ -473,7 +504,7 @@ class Click:
         # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file 
         # window = sig.get_window('boxcar', self.nfft)
         window = sig.get_window('boxcar', self.nfft)
-        self.freq, psd = sig.periodogram(x=sound_block, window=window, fs=self.fs, scaling='spectrum')
+        self.freq, psd = sig.periodogram(x=sound_block, window=window, nfft=self.nfft, fs=self.fs, scaling='spectrum')
 
         # Normalize spectrum
         self.psd = psd / np.max(psd)
@@ -594,6 +625,20 @@ class ClickConverter:
                 raise Exception('The extension %s is unkown' % extension)
 
         return df
+
+    def convert_row(self, row, fs):
+        signal = row['wave']
+        if 'datetime' in row.axes[0]:
+            dt = row.datetime
+        else:
+            dt = row.name
+        click = Click(signal, fs, dt, click_model_path=self.click_model_path, verbose=False)
+        values = []
+        for var in self.click_vars:
+            values.append(getattr(click, var))
+        row[self.click_vars] = values
+
+        return row
 
     @staticmethod
     def test_click_calculation(df_clicks, df_test, col_vars):

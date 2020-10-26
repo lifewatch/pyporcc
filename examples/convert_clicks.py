@@ -32,4 +32,4 @@ if __name__ == "__main__":
     # Convert the sound clips to click and save
     clicks_df = hydrophone.read_HFclicks(sound_folder_path)
     converter = click_detector.ClickConverter(click_model_path)
-    clicks = converter.clicks_df(clicks_df, save=True, save_path=clicks_output_path)
+    clicks = converter.clicks_df(clicks_df, save_path=clicks_output_path)

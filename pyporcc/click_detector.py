@@ -279,6 +279,8 @@ class ClickDetector:
         # Save the last detected clips
         self.save_clips()
 
+        return self.clips
+
     def get_click_clips(self, folder_path, zip_mode=False):
         """
         Go through all the sound files and create a database with the detected clicks.

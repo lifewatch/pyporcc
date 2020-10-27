@@ -21,6 +21,7 @@ import itertools
 import numpy as np
 import pandas as pd
 import configparser
+from importlib import resources
 import matplotlib.pyplot as plt 
 
 from sklearn import metrics, linear_model, model_selection, preprocessing
@@ -270,7 +271,11 @@ class PorCC:
 
         self.load_type = load_type
         if load_type == 'manual':
-            self.manual_models(kwargs['config_file'])
+            if kwargs['config_file'] is 'default':
+                with resources.path('pyporcc.models', 'log_models.ini') as config_path:
+                    self.manual_models(config_path)
+            else:
+                self.manual_models(kwargs['config_file'])
         else:
             for key, val in kwargs.items(): 
                 self.__dict__[key] = val

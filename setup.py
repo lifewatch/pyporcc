@@ -9,8 +9,7 @@ setuptools.setup(name='pyporcc',
                  license='',
                  include_package_data=True,
                  package_data={
-                    "pyporcc": ["data/standard_click.wav"],
-                    "pyporcc": ["models/*.ini"],
+                    "pyporcc": ["data/standard_click.wav", "models/*.ini"]
                  },
                  packages=setuptools.find_packages(),
                  zip_safe=False)

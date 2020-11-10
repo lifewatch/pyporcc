@@ -158,8 +158,8 @@ class ClickDetector:
         """
         Save the clips in a file
         """
-
-
+        clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' %
+                                                       self.clips.iloc[0].datetime.strftime('%d%m%y_%H%M%S'))
         clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
                                                        self.clips.iloc[0].datetime.strftime('%d%m%y_%H%M%S'))
         self.clips.to_pickle(clips_filename_pkl)

@@ -36,15 +36,14 @@ if __name__ == "__main__":
     """
     Detect clicks on sound data
     """
-    classifier = porcc.PorCC(load_type='manual', config_file='default')
-    # Run on sound data
-    cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=1000, convert=True,
-                                      classifier=classifier)
-    cd.detect_click_clips_file(sound_file_path, blocksize=60*500000)
-    df_py = cd.clips
+    # classifier = porcc.PorCC(load_type='manual', config_file='default')
+    # # Run on sound data
+    # cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=np.inf, convert=True,
+    #                                   classifier=classifier)
+    # cd.detect_click_clips_file(sound_file_path, blocksize=60*500000)
+    # df_py = cd.clips
 
-    df_py = pd.read_csv(save_folder.joinpath('Detected_Clicks_0.csv'))
-    df_py_pkl = pd.read_pickle(save_folder.joinpath('Detected_Clips_0.pkl'))
+    df_py = pd.read_pickle(save_folder.joinpath('Detected_Clips_0.pkl'))
     # Read the PAMGuard output to compare
     conn = sqlite3.connect(pamguard_output)
     query = "select * from Click_Detector_Clicks"
@@ -62,10 +61,10 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(2, 1, sharex=True)
     ax[0].scatter(df_pamguard.startSample, df_pamguard.duration, s=2.0)
-    ax[1].scatter(df_py.start_sample, df_py.duration, s=2.0)
+    ax[1].scatter(df_py.start_sample, df_py.duration_samples, s=2.0)
     ax[0].set_title('PAMGuard detections')
     ax[1].set_title('pyporcc detections')
-    ax[0].set_ylabel('Duration [us]')
-    ax[1].set_ylabel('Duration [us]')
+    ax[0].set_ylabel('Duration [samples]')
+    ax[1].set_ylabel('Duration [samples]')
     ax[1].set_xlabel('Samples')
     plt.show()

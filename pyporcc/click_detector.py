@@ -92,20 +92,20 @@ class ClickDetector:
 
         # Initialize the filters. Create them default if None is passed
         if prefilter is None:
-            nyq = fs/2
-            wn = [100000/nyq, 150000/nyq] 
+            wn = [100000, 150000]
             self.prefilter = Filter(filter_name='butter', order=4, frequencies=wn, filter_type='bandpass', fs=fs)
         else:
             self.prefilter = prefilter
         
         if dfilter is None:
             wn = 20000
-            self.dfilter = Filter(filter_name='butter', order=4, frequencies=wn, filter_type='high', fs=fs)
+            self.dfilter = Filter(filter_name='butter', order=2, frequencies=wn, filter_type='high', fs=fs)
         else:
             self.dfilter = dfilter
 
         # DataFrame with all the clips
-        self.clips = pd.DataFrame(columns=['id', 'datetime', 'start_sample', 'duration', 'amplitude', 'filename', 'wave'])
+        self.clips = pd.DataFrame(columns=['id', 'datetime', 'start_sample', 'duration_samples',
+                                           'duration_us', 'amplitude', 'filename', 'wave'])
         self.clips = self.clips.set_index('id')
         self.save_max = save_max
         self.save_folder = pathlib.Path(save_folder)
@@ -158,8 +158,10 @@ class ClickDetector:
         """
         Save the clips in a file
         """
-        clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' % self.clips.iloc[0].start_sample)
-        clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' % self.clips.iloc[0].start_sample)
+        clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' %
+                                                       self.clips.iloc[0].datetime.strftime('%d%m%y_%H%M%S'))
+        clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
+                                                       self.clips.iloc[0].datetime.strftime('%d%m%y_%H%M%S'))
         self.clips.to_pickle(clips_filename_pkl)
         self.clips[self.clips.class_type != 3].drop(columns=['wave']).to_csv(clips_filename_csv)
         self.clips.drop(index=self.clips.index, inplace=True)
@@ -220,9 +222,9 @@ class ClickDetector:
         amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
                                        self.hydrophone.Vpp)
         id = len(self.clips)
-        self.clips.at[id] = {'datetime': timestamp, 'start_sample': start_sample_block + start_sample,
-                             'wave': clip, 'duration': duration_samples, 'amplitude': amplitude,
-                             'filename': pathlib.Path(sound_file.name).name}
+        self.clips.at[id] = {'datetime': timestamp, 'start_sample': start_sample_block + start_sample, 'wave': clip,
+                             'duration_samples': duration_samples, 'duration_us': duration_samples*1e6/self.fs,
+                             'amplitude': amplitude, 'filename': pathlib.Path(sound_file.name).name}
         if self.classifier is not None:
             click_row = self.converter.convert_row(self.clips.iloc[id], fs=sound_file.samplerate)
             click_type = self.classifier.classify_row(click_row)
@@ -540,19 +542,14 @@ class Click:
         self.ratio = self.pf / self.cf
         
         # Calculate -3dB bandwith: Consecutive frequencies of the psd that have more than half of the maximum freq power
-        psd_db = 10 * np.log10(psd ** 2)
-        half = np.max(psd_db) - 3
-        max_freq_i = psd_db.argmax()
-        for i in np.arange(max_freq_i - 1, -1, step=-1):
-            if psd_db[i] <= half:
-                break
-        inter = interpolate.interp1d(psd_db[i: i + 2], self.freq[i: i + 2])
+        half = np.max(psd) / (10 ** (3/10.0))
+        max_freq_i = psd.argmax()
+        i = np.where(psd[0:max_freq_i] <= half)[0][-1]
+        inter = interpolate.interp1d(psd[i: i + 2], self.freq[i: i + 2])
         f_left = inter(half)
 
-        for i in np.arange(max_freq_i + 1, psd_db.size):
-            if psd_db[i] <= half:
-                break
-        inter = interpolate.interp1d(psd_db[i - 1: i + 1], self.freq[i - 1: i + 1])
+        i = np.where(psd[max_freq_i+1:-1] <= half)[0][0] + max_freq_i + 1
+        inter = interpolate.interp1d(psd[i - 1: i + 1], self.freq[i - 1: i + 1])
         f_right = inter(half)
 
         self.bw = (f_right - f_left)/1000.0
@@ -660,7 +657,10 @@ class ClickConverter:
 
 
 class Filter:
-    def __init__(self, filter_name, filter_type, frequencies, order):
+    def __init__(self, filter_name, filter_type, frequencies, order, fs=None):
+        """
+        Filter object that allows to change the sampling frequency keeping the other parameters
+        """
         if filter_name not in ['butter', 'cheby1', 'cheby2', 'besel']:
             raise Warning('Filter %s is not implemented or unknown, setting to Butterworth' % filter_name)
             filter_name = 'butter'
@@ -668,16 +668,29 @@ class Filter:
         self.filter_type = filter_type
         self.frequencies = frequencies
         self.order = order
-        self.filter = self.get_filt()
+        self.filter = None
+        self.fs = fs
 
-    def __call__(self, signal):
-        filt = self.get_filt()
-        sig.sosfilt(filt, signal)
+    def __setattr__(self, key, value):
+        if key == 'fs':
+            if value is not None:
+                self.get_filt(value)
+        self.__dict__[key] = value
+
+    def __call__(self, signal, zi=None):
+        if zi is None:
+            return sig.sosfilt(self.filter, signal)
+        else:
+            return sig.sosfilt(self.filter, signal, zi=zi)
 
     def get_filt(self, fs):
         filt = getattr(sig, self.filter_name)
-        f = filt(N=self.order, Wn=self.frequencies, btype=self.filter_type, analog=False, output='sos', fs=fs)
-        return f
+        if type(self.frequencies) is list:
+            wn = [f/(fs/2.0) for f in self.frequencies]
+            self.filter = filt(N=self.order, Wn=wn, btype=self.filter_type, analog=False, output='sos')
+        else:
+            self.filter = filt(N=self.order, Wn=self.frequencies, btype=self.filter_type, analog=False,
+                               output='sos', fs=fs)
 
     def get_zi(self):
-        return sig.sosfilt_zi()
+        return sig.sosfilt_zi(self.filter)

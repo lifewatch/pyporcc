@@ -7,5 +7,10 @@ setuptools.setup(name='pyporcc',
                  author='Clea Parcerisas',
                  author_email='cleaparcerisas@gmail.com',
                  license='',
+                 include_package_data=True,
+                 package_data={
+                    "pyporcc": ["data/standard_click.wav"],
+                    "pyporcc": ["models/*.ini"],
+                 },
                  packages=setuptools.find_packages(),
                  zip_safe=False)

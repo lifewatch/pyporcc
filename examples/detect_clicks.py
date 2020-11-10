@@ -36,7 +36,7 @@ if __name__ == "__main__":
     """
     Detect clicks on sound data
     """
-    # classifier = porcc.PorCC(load_type='manual', config_file='default')
+    classifier = porcc.PorCC(load_type='manual', config_file='default')
     # # Run on sound data
     # cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=np.inf, convert=True,
     #                                   classifier=classifier)

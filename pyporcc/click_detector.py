@@ -69,11 +69,11 @@ class ClickDetector:
             Number of samples to store after the click detection
         fs : int
             Sampling frequency
-        prefilter: filter output from scipy
+        prefilter: Filter object
             Prefilter to apply to the signal before passing it to the trigger. It is also applied to the stored clips.
             If set to None a band-pass Butterworth 4th order filter [100000, 150000] Hz will be used
-        dfilter : filter output from scipy
-            Filter to apply for the trigger.
+        dfilter : Filter object
+            Filter to apply for the trigger. Has to be of the class Filter
             If set to None, a high-pass Butterworth [20000, :] 4th order filter will be used
         save_max : int
             Maximum number of clicks to save in a file
@@ -94,13 +94,13 @@ class ClickDetector:
         if prefilter is None:
             nyq = fs/2
             wn = [100000/nyq, 150000/nyq] 
-            self.prefilter = sig.butter(N=4, Wn=wn, btype='bandpass', analog=False, output='sos')
+            self.prefilter = Filter(filter_name='butter', order=4, frequencies=wn, filter_type='bandpass', fs=fs)
         else:
             self.prefilter = prefilter
         
         if dfilter is None:
             wn = 20000
-            self.dfilter = sig.butter(N=2, Wn=wn, btype='high', analog=False, output='sos', fs=fs)
+            self.dfilter = Filter(filter_name='butter', order=4, frequencies=wn, filter_type='high', fs=fs)
         else:
             self.dfilter = dfilter
 
@@ -130,10 +130,8 @@ class ClickDetector:
         """
         if key == 'fs':
             if self.__dict__[key] != value: 
-                wn_pre = [100000, 150000] 
-                self.prefilter = sig.butter(N=8, Wn=wn_pre, btype='bandpass', analog=False, output='sos', fs=value)
-                wn_d = 20000
-                self.dfilter = sig.butter(N=4, Wn=wn_d, btype='high', analog=False, output='sos', fs=value)
+                self.dfiler.fs = value
+                self.prefilter.fs = value
         self.__dict__[key] = value         
 
     @staticmethod
@@ -152,7 +150,7 @@ class ClickDetector:
             Sample N
         """
         # Apply the prefilter to the sample
-        xi = sig.sosfilt(self.prefilter, xn)
+        xi = self.prefilter(xn)
 
         return xi
 
@@ -186,7 +184,7 @@ class ClickDetector:
         date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name)
         date += dt.timedelta(seconds=start_sample/sound_file.samplerate)
         # Filter the signal
-        filtered_signal = sig.sosfilt(self.dfilter, signal)
+        filtered_signal = self.dfilter(signal)
         for clip in clips_list:
             self.add_click_clip(filtered_signal, sound_file, date, start_sample, clip[0], clip[1])
 
@@ -268,7 +266,7 @@ class ClickDetector:
             blocksize = sound_file.frames
 
         # Start the filter conditions
-        zi = sig.sosfilt_zi(self.prefilter)
+        zi = self.prefilter.get_zi()
 
         # Initialize the clicks count
         n_on = 0
@@ -277,7 +275,7 @@ class ClickDetector:
 
         # Read the file by blocks
         for block_n, block in enumerate(sound_file.blocks(blocksize=blocksize, always_2d=True)):
-            prefilter_sig, zi = sig.sosfilt(self.prefilter, block[:, 0], zi=zi)
+            prefilter_sig, zi = self.prefilter(block[:, 0], zi=zi)
 
             # Read samples one by one, apply filter
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
@@ -287,7 +285,7 @@ class ClickDetector:
 
         return self.clips
 
-    def get_click_clips(self, folder_path, zip_mode=False):
+    def get_click_clips_folder(self, folder_path, zip_mode=False):
         """
         Go through all the sound files and create a database with the detected clicks.
 
@@ -659,3 +657,27 @@ class ClickConverter:
         mean_rel_error = rel_error.mean()
         
         return mean_rel_error
+
+
+class Filter:
+    def __init__(self, filter_name, filter_type, frequencies, order):
+        if filter_name not in ['butter', 'cheby1', 'cheby2', 'besel']:
+            raise Warning('Filter %s is not implemented or unknown, setting to Butterworth' % filter_name)
+            filter_name = 'butter'
+        self.filter_name = filter_name
+        self.filter_type = filter_type
+        self.frequencies = frequencies
+        self.order = order
+        self.filter = self.get_filt()
+
+    def __call__(self, signal):
+        filt = self.get_filt()
+        sig.sosfilt(filt, signal)
+
+    def get_filt(self, fs):
+        filt = getattr(sig, self.filter_name)
+        f = filt(N=self.order, Wn=self.frequencies, btype=self.filter_type, analog=False, output='sos', fs=fs)
+        return f
+
+    def get_zi(self):
+        return sig.sosfilt_zi()

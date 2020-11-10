@@ -26,6 +26,7 @@ from importlib import resources
 import matplotlib.pyplot as plt 
 
 from scipy import signal as sig
+from scipy import interpolate
 
 
 class ClickDetector:
@@ -104,8 +105,8 @@ class ClickDetector:
             self.dfilter = dfilter
 
         # DataFrame with all the clips
-        self.clips = pd.DataFrame(columns=['datetime', 'start_sample', 'duration', 'amplitude', 'filename', 'wave'])
-        self.clips = self.clips.set_index('datetime')
+        self.clips = pd.DataFrame(columns=['id', 'datetime', 'start_sample', 'duration', 'amplitude', 'filename', 'wave'])
+        self.clips = self.clips.set_index('id')
         self.save_max = save_max
         self.save_folder = pathlib.Path(save_folder)
 
@@ -159,8 +160,10 @@ class ClickDetector:
         """
         Save the clips in a file
         """
-        clips_filename = self.save_folder.joinpath('Detected_Clips_%s.csv' % self.clips.iloc[0].start_sample)
-        self.clips.drop(columns=['wave']).to_csv(clips_filename)
+        clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' % self.clips.iloc[0].start_sample)
+        clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' % self.clips.iloc[0].start_sample)
+        self.clips.to_pickle(clips_filename_pkl)
+        self.clips[self.clips.class_type != 3].drop(columns=['wave']).to_csv(clips_filename_csv)
         self.clips.drop(index=self.clips.index, inplace=True)
 
     def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
@@ -209,7 +212,6 @@ class ClickDetector:
         verbose : bool
             Set to True if plots are wanted
         """
-
         timestamp = date + dt.timedelta(seconds=start_sample/sound_file.samplerate)
 
         # Read the clip 
@@ -219,17 +221,21 @@ class ClickDetector:
 
         amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
                                        self.hydrophone.Vpp)
-        self.clips.at[timestamp] = {'start_sample': start_sample_block + start_sample, 'wave': clip,
-                                    'duration': duration_samples, 'amplitude': amplitude,
-                                    'filename': pathlib.Path(sound_file.name).name}
+        id = len(self.clips)
+        self.clips.at[id] = {'datetime': timestamp, 'start_sample': start_sample_block + start_sample,
+                             'wave': clip, 'duration': duration_samples, 'amplitude': amplitude,
+                             'filename': pathlib.Path(sound_file.name).name}
         if self.classifier is not None:
-            click_row = self.converter.convert_row(self.clips.loc[timestamp], fs=sound_file.samplerate)
+            click_row = self.converter.convert_row(self.clips.iloc[id], fs=sound_file.samplerate)
             click_type = self.classifier.classify_row(click_row)
-            self.clips.at[timestamp, 'class_type'] = click_type
+            self.clips.at[id, 'class_type'] = click_type
         if verbose:
             fig, ax = plt.subplots(2, 1)
-            ax[0].plot(clip, label='Signal not filtered')
+            # ax[0].plot(clip, label='Signal not filtered')
             ax[1].plot(clip, label='Filtered signal')
+            # ax[0].set_title('Signal not filtered')
+            ax[1].set_title('Signal filtered')
+            plt.legend()
             plt.tight_layout()
             plt.show()
             plt.close()
@@ -514,7 +520,7 @@ class Click:
         self.pf = self.freq[psd.argmax()]    
 
         # Calculate RMSBW
-        # BW = (sqrt(sum((f-CF).^2.*PSD.^2 ) / sum(PSD.^2)))/1000; 
+        # RMSBW = (sqrt(sum((f-CF).^2.*PSD.^2 ) / sum(PSD.^2)))/1000;
         self.rmsbw = (np.sqrt((np.sum(((self.freq - self.cf)**2) * (self.psd**2))) / np.sum(self.psd**2))) / 1000.0 
 
         # Calculate click duration based on Madsen & Walhberg 2007 - 80#
@@ -536,22 +542,22 @@ class Click:
         self.ratio = self.pf / self.cf
         
         # Calculate -3dB bandwith: Consecutive frequencies of the psd that have more than half of the maximum freq power
-        half = np.max(psd) / (10 ** (3/10.0))
-        max_freq_i = psd.argmax()
-        i_left, i_right = 0, 0
-        for i in np.arange(0, max_freq_i):
-            if psd[max_freq_i - i] < half:
+        psd_db = 10 * np.log10(psd ** 2)
+        half = np.max(psd_db) - 3
+        max_freq_i = psd_db.argmax()
+        for i in np.arange(max_freq_i - 1, -1, step=-1):
+            if psd_db[i] <= half:
                 break
-            else:
-                i_left = max_freq_i - i
+        inter = interpolate.interp1d(psd_db[i: i + 2], self.freq[i: i + 2])
+        f_left = inter(half)
 
-        for i in np.arange(0, psd.size - max_freq_i):
-            if psd[max_freq_i + i] < half:
+        for i in np.arange(max_freq_i + 1, psd_db.size):
+            if psd_db[i] <= half:
                 break
-            else:
-                i_right = max_freq_i + i
+        inter = interpolate.interp1d(psd_db[i - 1: i + 1], self.freq[i - 1: i + 1])
+        f_right = inter(half)
 
-        self.bw = (self.freq[i_right] - self.freq[i_left])/1000.0
+        self.bw = (f_right - f_left)/1000.0
 
         # Calculate the correlation with the model
         x_coeff = np.correlate(self.sound_block, self.click_model, mode='same')

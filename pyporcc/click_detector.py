@@ -96,12 +96,14 @@ class ClickDetector:
             self.prefilter = Filter(filter_name='butter', order=4, frequencies=wn, filter_type='bandpass', fs=fs)
         else:
             self.prefilter = prefilter
+            self.prefilter.fs = fs
         
         if dfilter is None:
             wn = 20000
             self.dfilter = Filter(filter_name='butter', order=2, frequencies=wn, filter_type='high', fs=fs)
         else:
             self.dfilter = dfilter
+            self.dfilter.fs = fs
 
         # DataFrame with all the clips
         self.clips = pd.DataFrame(columns=['id', 'datetime', 'start_sample', 'duration_samples',
@@ -129,9 +131,8 @@ class ClickDetector:
         If the sampling frequency of the sound is different than the one from the filters, update the filters 
         """
         if key == 'fs':
-            if self.__dict__[key] != value: 
-                self.dfiler.fs = value
-                self.prefilter.fs = value
+            self.dfilter.fs = value
+            self.prefilter.fs = value
         self.__dict__[key] = value         
 
     @staticmethod
@@ -260,9 +261,8 @@ class ClickDetector:
         # Open file
         sound_file = sf.SoundFile(sound_file_path, 'r')
 
-        # Update the frequency 
-        if sound_file.samplerate != self.fs: 
-            self.fs = sound_file.samplerate
+        # Update the frequency
+        self.fs = sound_file.samplerate
 
         if blocksize is None:
             blocksize = sound_file.frames
@@ -662,14 +662,17 @@ class Filter:
         Filter object that allows to change the sampling frequency keeping the other parameters
         """
         if filter_name not in ['butter', 'cheby1', 'cheby2', 'besel']:
-            raise Warning('Filter %s is not implemented or unknown, setting to Butterworth' % filter_name)
             filter_name = 'butter'
+            raise Warning('Filter %s is not implemented or unknown, setting to Butterworth' % filter_name)
         self.filter_name = filter_name
         self.filter_type = filter_type
         self.frequencies = frequencies
         self.order = order
-        self.filter = None
         self.fs = fs
+        if fs is not None:
+            self.get_filt(fs)
+        else:
+            self.filter = None
 
     def __setattr__(self, key, value):
         if key == 'fs':

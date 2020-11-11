@@ -36,12 +36,14 @@ if __name__ == "__main__":
     """
     Detect clicks on sound data
     """
+    prefilter = click_detector.Filter(filter_name='butter', order=4, frequencies=[100000, 150000], filter_type='bandpass')
+    dfilter = click_detector.Filter(filter_name='butter', order=2, frequencies=20000, filter_type='high')
     classifier = porcc.PorCC(load_type='manual', config_file='default')
-    # # Run on sound data
-    # cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=np.inf, convert=True,
-    #                                   classifier=classifier)
-    # cd.detect_click_clips_file(sound_file_path, blocksize=60*500000)
-    # df_py = cd.clips
+    # Run on sound data
+    cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=np.inf, convert=True,
+                                      classifier=classifier, dfilter=dfilter, prefilter=prefilter)
+    cd.detect_click_clips_file(sound_file_path, blocksize=60*500000)
+    df_py = cd.clips
 
     df_py = pd.read_pickle(save_folder.joinpath('Detected_Clips_0.pkl'))
     # Read the PAMGuard output to compare

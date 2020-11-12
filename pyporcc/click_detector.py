@@ -20,6 +20,7 @@ import pathlib
 import numpy as np
 import numba as nb
 import pandas as pd
+from tqdm import tqdm
 import datetime as dt
 import soundfile as sf
 from importlib import resources
@@ -53,8 +54,6 @@ class ClickDetector:
             Short filter parameter
         threshold : float
             Detection threshold in db
-        min_separation : int
-            Minimum separation between clicks in samples
         max_length : int
             Maximum length of a click in samples
         threshold : float
@@ -241,7 +240,6 @@ class ClickDetector:
             plt.show()
             plt.close()
 
-        print(len(self.clips))
         if len(self.clips) >= self.save_max:
             self.save_clips()
 
@@ -276,7 +274,8 @@ class ClickDetector:
         click_on = False
 
         # Read the file by blocks
-        for block_n, block in enumerate(sound_file.blocks(blocksize=blocksize, always_2d=True)):
+        for block_n, block in enumerate(tqdm(sound_file.blocks(blocksize=blocksize, always_2d=True),
+                                             total=sound_file.frames / blocksize)):
             prefilter_sig, zi = self.prefilter(block[:, 0], zi=zi)
 
             # Read samples one by one, apply filter
@@ -332,7 +331,7 @@ spec = [
 ]
 
 
-@nb.jitclass(spec)
+@nb.experimental.jitclass(spec)
 class TriggerFilter:
     def __init__(self, long_filt, long_filt2, short_filt, threshold, max_length, min_separation):
         """

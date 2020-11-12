@@ -32,7 +32,7 @@ from scipy import interpolate
 
 class ClickDetector:
     def __init__(self, hydrophone=None, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10,
-                 min_separation=100, max_length=1024, pre_samples=40, post_samples=40, fs=576000,
+                 min_separation=100, max_length=1024, min_length=100, pre_samples=40, post_samples=40, fs=576000,
                  prefilter=None, dfilter=None, save_max=np.inf, save_folder='.',
                  convert=False, click_model_path=None, classifier=None):
         """
@@ -87,7 +87,8 @@ class ClickDetector:
         self.post_samples = post_samples
         self.fs = fs
         
-        self.triggerfilter = TriggerFilter(long_filt, long_filt2, short_filt, threshold, max_length, min_separation)
+        self.triggerfilter = TriggerFilter(long_filt, long_filt2, short_filt, threshold, max_length,
+                                           min_length, min_separation)
 
         # Initialize the filters. Create them default if None is passed
         if prefilter is None:
@@ -324,6 +325,7 @@ spec = [
     ('short_filt', nb.float32),
     ('threshold', nb.int32),
     ('max_length', nb.int32),
+    ('min_length', nb.int32),
     ('min_separation', nb.int32),
     ('Si', nb.float32),
     ('Ni', nb.float32),
@@ -333,7 +335,7 @@ spec = [
 
 @nb.experimental.jitclass(spec)
 class TriggerFilter:
-    def __init__(self, long_filt, long_filt2, short_filt, threshold, max_length, min_separation):
+    def __init__(self, long_filt, long_filt2, short_filt, threshold, max_length, min_length, min_separation):
         """
         Create a Trigger Filter
         The noise level N at sample i is measured using
@@ -356,6 +358,8 @@ class TriggerFilter:
             Detection threshold in db
         min_separation : int
             Minimum separation between clicks in samples
+        min_length : int
+            Minimum length of a click in samples
         max_length : int
             Maximum length of a click in samples
         """
@@ -364,6 +368,7 @@ class TriggerFilter:
         self.short_filt = short_filt
         self.threshold = 10 ** (threshold / 20.0)
         self.max_length = max_length
+        self.min_length = min_length
         self.min_separation = min_separation
 
         self.Si = 0
@@ -447,7 +452,8 @@ class TriggerFilter:
                 else:
                     # If it has been off for more than min_separation, save the click! 
                     if n_off >= self.min_separation:
-                        clips.append((start_sample, n_on))
+                        if n_on >= self.min_length:
+                            clips.append((start_sample, n_on))
                         click_on = False
                         n_on = 0
                         n_off = 0

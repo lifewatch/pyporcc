@@ -44,7 +44,13 @@ def constrain(x, lower, upper):
     MATLAB constrain
     Constrain between upper and lower limits, and do not ignore NaN
     """
-    x[np.where(x < lower)[0]] = lower
-    x[np.where(x > upper)[0]] = upper
+    if type(x) != np.float:
+        x[np.where(x < lower)[0]] = lower
+        x[np.where(x > upper)[0]] = upper
+    else:
+        if x < lower:
+            x = lower
+        elif x > upper:
+            x = upper
 
     return x

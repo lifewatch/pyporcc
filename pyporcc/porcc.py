@@ -254,7 +254,7 @@ class PorCCModel:
 
 
 class PorCC:
-    def __init__(self, load_type, **kwargs):
+    def __init__(self, load_type, class_column='pyPorCC', **kwargs):
         """
         Start the classifier
         If load_type is set to 'manual', loads the models from the config file. Then config_file must be specified
@@ -268,6 +268,7 @@ class PorCC:
         self.th2 = 0.55                  # threshold for LQ clicks
         self.lowcutfreq = 100e3          # Lowcut frequency
         self.highcutfreq = 160e3         # Highcut frequency
+        self.class_column = class_column
 
         self.load_type = load_type
         if load_type == 'manual':
@@ -325,18 +326,19 @@ class PorCC:
         x : pandas row or dictionary
             Row to be classified
         """
+        x = x.copy()
         # Add the independent variable
         x['const'] = 1
         if (x['CF'] > self.lowcutfreq) and (x['CF'] < self.highcutfreq) and (x['Q'] > 4):
             # Evaluate the model on the given x
-            prob_hq = self.hq_mod.predict_proba(x[self.hq_params].values.reshape(1, -1))[0][1]
+            prob_hq = self.hq_mod.predict_proba(x[self.hq_params])[0][1]
 
             # Assign clip to a category
             if prob_hq >= self.th1:
                 # HQ click
                 porps = 1  
             else:
-                prob_lq = self.lq_mod.predict_proba(x[self.lq_params].values.reshape(1, -1))[0][1]
+                prob_lq = self.lq_mod.predict_proba(x[self.lq_params])[0][1]
                 if prob_lq > self.th2:
                     # LQ click
                     porps = 2  
@@ -359,7 +361,8 @@ class PorCC:
         """
         # Add the independent variable for the regression
         # Initialize the prediction column
-        df = df.assign(const=1, pyPorCC=0)
+        df = df.assign(const=1)
+        df[self.class_column] = 0
 
         # Evaluate the model on the given x
         df = df.assign(prob_hq=self.hq_mod.predict_proba(df[self.hq_params])[:, 1],
@@ -367,10 +370,11 @@ class PorCC:
 
         # Decide
         loc_idx = (df['CF'] > self.lowcutfreq) & (df['CF'] < self.highcutfreq) & (df['Q'] > 4)
-        df.loc[~loc_idx, 'pyPorCC'] = 3                                                                      # N Clicks
-        df.loc[loc_idx & (df['prob_hq'] > self.th1), 'pyPorCC'] = 1                                          # HQ Clicks
-        df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] > self.th2), 'pyPorCC'] = 2             # LQ Clicks
-        df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] <= self.th2), 'pyPorCC'] = 3            # N Clicks
+        # Add remove duration > 450
+        df.loc[~loc_idx, self.class_column] = 3                                                                      # N Clicks
+        df.loc[loc_idx & (df['prob_hq'] > self.th1), self.class_column] = 1                                          # HQ Clicks
+        df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] > self.th2), self.class_column] = 2             # LQ Clicks
+        df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] <= self.th2), self.class_column] = 3            # N Clicks
 
         return df
     
@@ -383,7 +387,7 @@ class PorCC:
         df : DataFrame
 
         """
-        y_pred = self.classify_matrix(df)['pyPorCC']
+        y_pred = self.classify_matrix(df)[self.class_column]
 
         return y_pred    
 
@@ -431,8 +435,8 @@ class PorCC:
         """
         predicted_df = self.classify_matrix(test_df)
 
-        # Compare 'pyPorCC' vs 'ClassifiedAs' (MATLAB)
-        error = np.sum(test_df[col_name] != predicted_df['pyPorCC'])/len(test_df)
+        # Compare self.class_column vs 'ClassifiedAs' (MATLAB)
+        error = np.sum(test_df[col_name] != predicted_df[self.class_column])/len(test_df)
 
         return error, predicted_df
 
@@ -536,7 +540,6 @@ class ManualLogit:
         x : np.array
             Array with the X coefficients to be predict the class
         """
-        x = preprocessing.StandardScaler(x)
         proba = self.predict_proba(x)[0][:, 1]
         y_pred = np.zeros(proba.shape)
         y_pred[np.where(proba >= self.th_)] = 1
@@ -553,8 +556,10 @@ class ManualLogit:
         """
         lower_bnd = np.log(np.finfo(np.float64).eps)
         upper_bnd = -lower_bnd
-        x_scale = preprocessing.scale(x)
-        xb = np.array(np.sum(x_scale*self.coef_[1:], axis=1) + self.coef_[0])
+        if len(x.shape) == 1:
+            xb = (x * self.coef_[1:]).sum() + self.coef_[0]
+        else:
+            xb = (x * self.coef_[1:]).sum(axis=1) + self.coef_[0]
         odds = np.exp(-utils.constrain(xb, lower_bnd, upper_bnd))
         prob_1 = 1 / (1 + odds)
         prob = np.column_stack((1-prob_1, prob_1))

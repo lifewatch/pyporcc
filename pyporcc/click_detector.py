@@ -114,10 +114,9 @@ class ClickDetector:
 
         self.classifier = classifier
         if classifier is not None:
-            if self.check_classifier(classifier):
-                self.clips['class_type'] = None
-            else:
+            if not self.check_classifier(classifier):
                 raise TypeError('This classifier does not have a function to classify clicks!')
+            # self.classifier.class_column = 'class_type'
         if convert:
             if click_model_path is None:
                 with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
@@ -125,6 +124,10 @@ class ClickDetector:
             self.converter = ClickConverter(click_model_path=click_model_path)
             for var in self.converter.click_vars:
                 self.clips[var] = None
+        else:
+            self.converter = None
+
+        self.saved_files = []
 
     def __setitem__(self, key, value):
         """
@@ -164,8 +167,10 @@ class ClickDetector:
         clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
                                                        self.clips.iloc[0].datetime.strftime('%d%m%y_%H%M%S'))
         self.clips.to_pickle(clips_filename_pkl)
-        self.clips[self.clips.class_type != 3].drop(columns=['wave']).to_csv(clips_filename_csv)
+        # clicks_mask = (self.clips.class_type == 1) | (self.clips.class_type == 2)
+        # self.clips[clicks_mask].drop(columns=['wave']).to_csv(clips_filename_csv)
         self.clips.drop(index=self.clips.index, inplace=True)
+        self.saved_files.append(clips_filename_pkl)
 
     def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
         """
@@ -223,13 +228,14 @@ class ClickDetector:
         amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
                                        self.hydrophone.Vpp)
         id = len(self.clips)
-        self.clips.at[id] = {'datetime': timestamp, 'start_sample': start_sample_block + start_sample, 'wave': clip,
-                             'duration_samples': duration_samples, 'duration_us': duration_samples*1e6/self.fs,
-                             'amplitude': amplitude, 'filename': pathlib.Path(sound_file.name).name}
-        if self.classifier is not None:
-            click_row = self.converter.convert_row(self.clips.iloc[id], fs=sound_file.samplerate)
-            click_type = self.classifier.classify_row(click_row)
-            self.clips.at[id, 'class_type'] = click_type
+        self.clips.at[id, ['datetime', 'start_sample', 'wave', 'duration_samples', 'duration_us',
+                           'amplitude', 'filename']] = [timestamp, start_sample_block + start_sample, clip,
+                                                        duration_samples, duration_samples*1e6/self.fs,
+                                                        amplitude, pathlib.Path(sound_file.name).name]
+        if self.converter is not None:
+            self.clips.at[id] = self.converter.convert_row(self.clips.iloc[id], fs=sound_file.samplerate).values
+        # if self.classifier is not None:
+        #     self.clips.at[id, 'class_type'] = self.classifier.classify_row(self.clips.iloc[id])
         if verbose:
             fig, ax = plt.subplots(2, 1)
             # ax[0].plot(clip, label='Signal not filtered')
@@ -242,6 +248,8 @@ class ClickDetector:
             plt.close()
 
         if len(self.clips) >= self.save_max:
+            if self.classifier is not None:
+                self.clips = self.classifier.classify_matrix(self.clips)
             self.save_clips()
 
     def detect_click_clips_file(self, sound_file_path, blocksize=None):
@@ -283,7 +291,8 @@ class ClickDetector:
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
             self.add_click_clips(block_n*blocksize, blocksize, sound_file, clips)
         # Save the last detected clips
-        self.save_clips()
+        if self.save_max != np.inf:
+            self.save_clips()
 
         return self.clips
 
@@ -317,6 +326,18 @@ class ClickDetector:
                         wav_file = os.path.join(day_folder_path, file_name)
                     self.detect_click_clips_file(wav_file)
         return self.clips
+
+    def classify_all_saved_clips(self, classifier=None):
+        if classifier is not None:
+            self.classifier = classifier
+        else:
+            if self.classifier is None:
+                raise Exception('You need to provide one classifier in order to classify!')
+        for f in self.saved_files:
+            df = pd.read_pickle(f)
+            df = self.classifier.classify_matrix(df)
+            df.to_pickle(f)
+
 
 
 spec = [
@@ -635,16 +656,15 @@ class ClickConverter:
         return df
 
     def convert_row(self, row, fs):
+        row = row.copy()
         signal = row['wave']
         if 'datetime' in row.axes[0]:
             dt = row.datetime
         else:
             dt = row.name
         click = Click(signal, fs, dt, click_model_path=self.click_model_path, verbose=False)
-        values = []
         for var in self.click_vars:
-            values.append(getattr(click, var))
-        row[self.click_vars] = values
+            row[var] = getattr(click, var)
 
         return row
 

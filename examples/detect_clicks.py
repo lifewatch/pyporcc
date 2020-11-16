@@ -13,7 +13,7 @@ from pyporcc import porcc
 # CONFIG
 
 # Sound Files
-sound_file_path = pathlib.Path("../pyporcc/data/738496579.150812000428.wav")
+sound_file_path = pathlib.Path("../pyporcc/data/738496579.150824180131.wav")
 save_folder = pathlib.Path('C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/')
 include_subfolders = True
 
@@ -45,8 +45,9 @@ if __name__ == "__main__":
     cd.detect_click_clips_file(sound_file_path, blocksize=60*576000)
     df_py = cd.clips
 
-    df_py = pd.read_pickle(save_folder.joinpath('Detected_Clips_110815_230428.pkl'))
-    df2 = classifier.classify_matrix(df_py)
+    # df_py = pd.read_pickle(save_folder.joinpath('Detected_Clips_110815_230428.pkl'))
+    # df_py = pd.read_csv(save_folder.joinpath('Clicks_mel_prob.csv'))
+    # df2 = classifier.classify_matrix(df_py)
     # Read the PAMGuard output to compare
     conn = sqlite3.connect(pamguard_output)
     query = "select * from Click_Detector_Clicks"

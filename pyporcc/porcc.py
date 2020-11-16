@@ -326,9 +326,8 @@ class PorCC:
         x : pandas row or dictionary
             Row to be classified
         """
-        x = x.copy()
         # Add the independent variable
-        x['const'] = 1
+        x.at['const'] = 1
         if (x['CF'] > self.lowcutfreq) and (x['CF'] < self.highcutfreq) and (x['Q'] > 4):
             # Evaluate the model on the given x
             prob_hq = self.hq_mod.predict_proba(x[self.hq_params])[0][1]

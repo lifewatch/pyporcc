@@ -13,6 +13,7 @@ from pyporcc import porcc
 
 # Sound Files
 sound_folder = pathlib.Path("C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/")
+sound_file = pathlib.Path('../pyporcc/data/738496579.150824180131.wav')
 save_folder = pathlib.Path('C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/')
 include_subfolders = True
 
@@ -36,37 +37,37 @@ if __name__ == "__main__":
     Detect clicks on sound data
     """
     prefilter = click_detector.Filter(filter_name='butter', order=4, frequencies=[100000, 150000], filter_type='bandpass')
-    dfilter = click_detector.Filter(filter_name='butter', order=4, frequencies=20000, filter_type='high')
+    dfilter = click_detector.Filter(filter_name='butter', order=2, frequencies=20000, filter_type='high')
     classifier = porcc.PorCC(load_type='manual', config_file='default')
     # Run on sound data
     cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=200000, convert=True,
                                       classifier=classifier, dfilter=dfilter, prefilter=prefilter, save_noise=False)
-    cd.detect_click_clips_folder(sound_folder, blocksize=60*576000)
+    cd.detect_click_clips_file(sound_file, blocksize=60*576000)
     df_py = cd.clips
     # df_py = pd.read_pickle(save_folder.joinpath('Detected_Clips_110815_230428.pkl'))
     # df_py = pd.read_csv(save_folder.joinpath('Clicks_mel_prob.csv'))
     # df2 = classifier.classify_matrix(df_py)
     # Read the PAMGuard output to compare
-    # conn = sqlite3.connect(pamguard_output)
-    # query = "select * from Click_Detector_Clicks"
-    # df_pamguard = pd.read_sql_query(query, conn)
-    #
-    # fig, ax = plt.subplots(2, 1, sharex=True)
-    # ax[0].scatter(df_pamguard.startSample, df_pamguard.amplitude, s=2.0)
-    # ax[1].scatter(df_py.start_sample, df_py.amplitude, s=2.0)
-    # ax[0].set_title('PAMGuard detections')
-    # ax[1].set_title('pyporcc detections')
-    # ax[0].set_ylabel('Amplitude rms [db]')
-    # ax[1].set_ylabel('Amplitude rms [db]')
-    # ax[1].set_xlabel('Samples')
-    # plt.show()
-    #
-    # fig, ax = plt.subplots(2, 1, sharex=True)
-    # ax[0].scatter(df_pamguard.startSample, df_pamguard.duration, s=2.0)
-    # ax[1].scatter(df_py.start_sample, df_py.duration_samples, s=2.0)
-    # ax[0].set_title('PAMGuard detections')
-    # ax[1].set_title('pyporcc detections')
-    # ax[0].set_ylabel('Duration [samples]')
-    # ax[1].set_ylabel('Duration [samples]')
-    # ax[1].set_xlabel('Samples')
-    # plt.show()
+    conn = sqlite3.connect(pamguard_output)
+    query = "select * from Click_Detector_Clicks"
+    df_pamguard = pd.read_sql_query(query, conn)
+
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    ax[0].scatter(df_pamguard.startSample, df_pamguard.amplitude, s=2.0)
+    ax[1].scatter(df_py.start_sample, df_py.amplitude, s=2.0)
+    ax[0].set_title('PAMGuard detections')
+    ax[1].set_title('pyporcc detections')
+    ax[0].set_ylabel('Amplitude rms [db]')
+    ax[1].set_ylabel('Amplitude rms [db]')
+    ax[1].set_xlabel('Samples')
+    plt.show()
+
+    fig, ax = plt.subplots(2, 1, sharex=True)
+    ax[0].scatter(df_pamguard.startSample, df_pamguard.duration, s=2.0)
+    ax[1].scatter(df_py.start_sample, df_py.duration_samples, s=2.0)
+    ax[0].set_title('PAMGuard detections')
+    ax[1].set_title('pyporcc detections')
+    ax[0].set_ylabel('Duration [samples]')
+    ax[1].set_ylabel('Duration [samples]')
+    ax[1].set_xlabel('Samples')
+    plt.show()

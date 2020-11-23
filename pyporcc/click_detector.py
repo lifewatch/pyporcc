@@ -32,7 +32,7 @@ from scipy import interpolate
 
 class ClickDetector:
     def __init__(self, hydrophone=None, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10,
-                 min_separation=100, max_length=1024, min_length=100, pre_samples=40, post_samples=40, fs=576000,
+                 min_separation=100, max_length=1024, min_length=90, pre_samples=40, post_samples=40, fs=576000,
                  prefilter=None, dfilter=None, save_max=np.inf, save_folder='.',
                  convert=False, click_model_path=None, classifier=None, save_noise=False):
         """
@@ -88,9 +88,17 @@ class ClickDetector:
         self.pre_samples = pre_samples
         self.post_samples = post_samples
         self.fs = fs
-        
-        self.triggerfilter = TriggerFilter(long_filt, long_filt2, short_filt, threshold, max_length,
-                                           min_length, min_separation)
+
+        real_min_length = min_length - post_samples - pre_samples
+        real_max_length = max_length - post_samples - pre_samples
+        if real_min_length < 0:
+            real_min_length = 1
+            print('This min length is less than pre_samples + post_samples. Setting it to 1...')
+        if real_max_length < 0:
+            real_max_length = 1000
+            print('This max length is less than pre_samples + post_samples. Setting it to 1000...')
+        self.triggerfilter = TriggerFilter(long_filt, long_filt2, short_filt, threshold, real_max_length,
+                                           real_min_length, min_separation)
 
         # Initialize the filters. Create them default if None is passed
         if prefilter is None:
@@ -226,18 +234,19 @@ class ClickDetector:
             Set to True if plots are wanted
         """
         timestamp = date + dt.timedelta(seconds=start_sample/sound_file.samplerate)
-
         # Read the clip 
         istart = max(0, start_sample - self.pre_samples)
         frames = min(start_sample - istart + duration_samples + self.post_samples, signal.size)
         clip = signal[istart:istart+frames]
 
+        if duration_samples < 10:
+            print('TOO FEW!', duration_samples)
         amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
                                        self.hydrophone.Vpp)
         id = len(self.clips)
         self.clips.at[id, ['datetime', 'start_sample', 'wave', 'duration_samples', 'duration_us',
-                           'amplitude', 'filename']] = [timestamp, start_sample_block + start_sample, clip,
-                                                        duration_samples, duration_samples*1e6/self.fs,
+                           'amplitude', 'filename']] = [timestamp, start_sample_block + istart, clip,
+                                                        frames, frames*1e6/self.fs,
                                                         amplitude, pathlib.Path(sound_file.name).name]
         if self.converter is not None:
             self.clips.at[id] = self.converter.convert_row(self.clips.iloc[id], fs=sound_file.samplerate).values
@@ -254,9 +263,6 @@ class ClickDetector:
 
         if len(self.clips) >= self.save_max:
             self.save_clips()
-
-        if clip.size < 100:
-            print('TOO FEW!', clip.size)
 
     def detect_click_clips_file(self, sound_file_path, blocksize=None):
         """
@@ -461,28 +467,34 @@ class TriggerFilter:
         i = 0
         for xi in prefilter_signal:    
             self.run(xi)
+            # If it has been on for too long, save the click!
             if click_on:
-                # If it has been on for too long, save the click!
-                if n_on >= self.max_length:
-                    clips.append((start_sample, n_on))
-                    click_on = False
-                    n_on = 0
                 if self.trigger: 
-                    # Continue the click 
-                    # In case we were already in the count down but it is actually the same click,
-                    # consider the count down as part of the click!
-                    if n_off > 0: 
-                        n_on += n_off
-                        n_off = 0
+                    # Continue the click
+                    if n_off > 0:
+                        # If it is triggered but the sum of n_on and n_off is already too much
+                        # We can't consider it the same click. In case n_on was long enough it is saved
+                        # Otherwise it is just discarded
+                        if n_on + n_off >= self.max_length:
+                            if n_on >= self.min_length:
+                                clips.append((start_sample, n_on))
+                            click_on = False
+                            n_on = 0
+                            n_off = 0
+                        else:
+                            # In case we were already in the count down but it is actually the same click,
+                            # consider the count down as part of the click!
+                            n_on += n_off
+                            n_off = 0
                     n_on += 1
                 else:
                     # If it has been off for more than min_separation, save the click! 
                     if n_off >= self.min_separation:
                         if n_on >= self.min_length:
                             clips.append((start_sample, n_on))
-                        click_on = False
-                        n_on = 0
-                        n_off = 0
+                            click_on = False
+                            n_on = 0
+                            n_off = 0
                     else:
                         # Start to end the click
                         n_off += 1
@@ -493,7 +505,11 @@ class TriggerFilter:
                     click_on = True
                     n_on = 0
                     n_off = 0
-            
+            if n_on >= self.max_length:
+                clips.append((start_sample, n_on))
+                click_on = False
+                n_on = 0
+                n_off = 0
             i += 1
 
         return clips, click_on, n_on, n_off

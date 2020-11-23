@@ -12,7 +12,7 @@ from pyporcc import porcc
 # CONFIG
 
 # Sound Files
-sound_file_path = pathlib.Path("../pyporcc/data/738496579.150824180131.wav")
+sound_folder = pathlib.Path("C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/")
 save_folder = pathlib.Path('C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/')
 include_subfolders = True
 
@@ -40,8 +40,8 @@ if __name__ == "__main__":
     classifier = porcc.PorCC(load_type='manual', config_file='default')
     # Run on sound data
     cd = click_detector.ClickDetector(hydrophone=soundtrap, save_folder=save_folder, save_max=200000, convert=True,
-                                      classifier=classifier, dfilter=dfilter, prefilter=prefilter)
-    cd.detect_click_clips_file(sound_file_path, blocksize=60*576000)
+                                      classifier=classifier, dfilter=dfilter, prefilter=prefilter, save_noise=False)
+    cd.detect_click_clips_folder(sound_folder, blocksize=60*576000)
     df_py = cd.clips
     # df_py = pd.read_pickle(save_folder.joinpath('Detected_Clips_110815_230428.pkl'))
     # df_py = pd.read_csv(save_folder.joinpath('Clicks_mel_prob.csv'))

@@ -34,7 +34,7 @@ class ClickDetector:
     def __init__(self, hydrophone=None, long_filt=0.00001, long_filt2=0.000001, short_filt=0.1, threshold=10,
                  min_separation=100, max_length=1024, min_length=100, pre_samples=40, post_samples=40, fs=576000,
                  prefilter=None, dfilter=None, save_max=np.inf, save_folder='.',
-                 convert=False, click_model_path=None, classifier=None):
+                 convert=False, click_model_path=None, classifier=None, save_noise=False):
         """
         Process to detect clicks
         Trigger decision
@@ -80,6 +80,8 @@ class ClickDetector:
             Folder where to save the click output
         classifier : classifier object
             Classifier used to classify the snippets. Needs to have a classify_click function
+        save_noise : bool
+            Set to True if you want to save the noise clips as well
         """
         self.hydrophone = hydrophone
         # Detector parameters
@@ -111,6 +113,7 @@ class ClickDetector:
         self.clips = self.clips.set_index('id')
         self.save_max = save_max
         self.save_folder = pathlib.Path(save_folder)
+        self.save_noise = save_noise
 
         self.classifier = classifier
         if classifier is not None:
@@ -163,10 +166,14 @@ class ClickDetector:
         """
         if self.classifier is not None:
             self.clips = self.classifier.classify_matrix(self.clips)
+            if not self.save_noise:
+                self.clips.drop()
+
         clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' %
                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
         clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+
         self.clips.to_pickle(clips_filename_pkl)
         self.clips.drop(columns=['wave']).to_csv(clips_filename_csv)
         self.clips.drop(index=self.clips.index, inplace=True)
@@ -248,6 +255,9 @@ class ClickDetector:
         if len(self.clips) >= self.save_max:
             self.save_clips()
 
+        if clip.size < 100:
+            print('TOO FEW!', clip.size)
+
     def detect_click_clips_file(self, sound_file_path, blocksize=None):
         """
         Return the possible clips containing clicks
@@ -280,22 +290,19 @@ class ClickDetector:
 
         # Read the file by blocks
         for block_n, block in enumerate(tqdm(sound_file.blocks(blocksize=blocksize, always_2d=True),
-                                             total=sound_file.frames / blocksize)):
+                                             total=sound_file.frames / blocksize, desc='file', leave=False)):
             prefilter_sig, zi = self.prefilter(block[:, 0], zi=zi)
 
             # Read samples one by one, apply filter
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
             self.add_click_clips(block_n*blocksize, blocksize, sound_file, clips)
-        # Save the last detected clips
-        if self.save_max != np.inf:
-            self.save_clips()
-        else:
-            if self.classifier is not None:
-                self.clips = self.classifier.classify_matrix(self.clips)
+
+        if self.classifier is not None:
+            self.clips = self.classifier.classify_matrix(self.clips)
 
         return self.clips
 
-    def get_click_clips_folder(self, folder_path, zip_mode=False):
+    def detect_click_clips_folder(self, folder_path, blocksize=None, zip_mode=False):
         """
         Go through all the sound files and create a database with the detected clicks.
 
@@ -306,24 +313,25 @@ class ClickDetector:
         zip_mode : bool
             Set to True if the files are zipped
         """
-        # Run the classifier in every file of the folder
-        for day_folder_name in os.listdir(folder_path):
-            day_folder_path = os.path.join(folder_path, day_folder_name)
-            if zip_mode:
-                day_folder_path = zipfile.ZipFile(day_folder_path, 'r', allowZip64=True)
-                files_list = day_folder_path.namelist()
-            else:
-                files_list = os.listdir(day_folder_path)
-            for file_name in files_list:
-                extension = file_name.split(".")[-1]
-                if extension == 'wav':
-                    print(file_name)
-                    # Get the wav
-                    if zip_mode:
-                        wav_file = day_folder_path.open(file_name)
-                    else:
-                        wav_file = os.path.join(day_folder_path, file_name)
-                    self.detect_click_clips_file(wav_file)
+        if isinstance(folder_path, str):
+            folder_path = pathlib.Path(folder_path)
+        if zip_mode:
+            folder_path = zipfile.ZipFile(folder_path, 'r', allowZip64=True)
+            files_list = folder_path.namelist()
+        else:
+            files_list = sorted(folder_path.glob('*.wav'))
+        for file_name in tqdm(files_list, total=len(files_list), desc='folder'):
+            if file_name.suffix == '.wav':
+                # Get the wav
+                if zip_mode:
+                    wav_file = folder_path.open(file_name)
+                else:
+                    wav_file = file_name
+                self.detect_click_clips_file(wav_file, blocksize=blocksize)
+
+        if self.save_max != np.inf:
+            self.save_clips()
+
         return self.clips
 
     def classify_all_saved_clips(self, classifier=None):
@@ -454,6 +462,11 @@ class TriggerFilter:
         for xi in prefilter_signal:    
             self.run(xi)
             if click_on:
+                # If it has been on for too long, save the click!
+                if n_on >= self.max_length:
+                    clips.append((start_sample, n_on))
+                    click_on = False
+                    n_on = 0
                 if self.trigger: 
                     # Continue the click 
                     # In case we were already in the count down but it is actually the same click,
@@ -462,12 +475,6 @@ class TriggerFilter:
                         n_on += n_off
                         n_off = 0
                     n_on += 1
-
-                    # If it has been on for too long, save the click! 
-                    if n_on >= self.max_length:
-                        clips.append((start_sample, n_on))
-                        click_on = False
-                        n_on = 0
                 else:
                     # If it has been off for more than min_separation, save the click! 
                     if n_off >= self.min_separation:

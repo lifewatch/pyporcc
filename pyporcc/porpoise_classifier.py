@@ -24,7 +24,7 @@ from sklearn import preprocessing, feature_selection, model_selection, utils
 
 
 class PorpoiseClassifier:
-    def __init__(self, train_data=None, test_data=None, ind_vars=None, dep_var=None):
+    def __init__(self, train_data=None, test_data=None, ind_vars=None, dep_var=None, class_column='model'):
         """
         Find the click model
 
@@ -50,6 +50,7 @@ class PorpoiseClassifier:
         self.train_data = train_data
         self.test_data = test_data
         self.models = {}
+        self.class_column = class_column
 
     def split_data(self, data_df, train_size=0.4):
         """
@@ -360,7 +361,7 @@ class PorpoiseClassifier:
         A DataFrame with the class prediction for all the trained models
         """
         for model_info in self.models:
-            x['model'] = model_info['model'].predict(x[model_info['ind_vars']])
+            x[self.class_column] = model_info['model'].predict(x[model_info['ind_vars']])
         return x
 
     def classify_matrix(self, df):
@@ -377,5 +378,5 @@ class PorpoiseClassifier:
         A DataFrame with the class prediction for all the trained models
         """
         for model_info in self.models:
-            df['model'] = model_info['model'].predict(df[model_info['ind_vars']])
+            df[self.class_column] = model_info['model'].predict(df[model_info['ind_vars']])
         return df

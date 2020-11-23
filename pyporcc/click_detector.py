@@ -116,7 +116,6 @@ class ClickDetector:
         if classifier is not None:
             if not self.check_classifier(classifier):
                 raise TypeError('This classifier does not have a function to classify clicks!')
-            # self.classifier.class_column = 'class_type'
         if convert:
             if click_model_path is None:
                 with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
@@ -162,6 +161,8 @@ class ClickDetector:
         """
         Save the clips in a file
         """
+        if self.classifier is not None:
+            self.clips = self.classifier.classify_matrix(self.clips)
         clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' %
                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
         clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
@@ -245,8 +246,6 @@ class ClickDetector:
             plt.close()
 
         if len(self.clips) >= self.save_max:
-            # if self.classifier is not None:
-            #     self.clips = self.classifier.classify_matrix(self.clips)
             self.save_clips()
 
     def detect_click_clips_file(self, sound_file_path, blocksize=None):
@@ -290,6 +289,9 @@ class ClickDetector:
         # Save the last detected clips
         if self.save_max != np.inf:
             self.save_clips()
+        else:
+            if self.classifier is not None:
+                self.clips = self.classifier.classify_matrix(self.clips)
 
         return self.clips
 
@@ -334,7 +336,6 @@ class ClickDetector:
             df = pd.read_pickle(f)
             df = self.classifier.classify_matrix(df)
             df.to_pickle(f)
-
 
 
 spec = [
@@ -527,10 +528,7 @@ class Click:
 
         # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
         window = sig.get_window('boxcar', self.nfft)
-        if sound_block.size < self.nfft:
-            zero_padded = np.zeros(self.nfft)
-            zero_padded[0:sound_block.size] = sound_block
-            sound_block = zero_padded
+        sound_block = zero_pad(sound_block, self.nfft)
         self.freq, psd = sig.periodogram(x=sound_block, window=window, nfft=self.nfft, fs=self.fs, scaling='spectrum')
 
         # Normalize spectrum
@@ -540,21 +538,10 @@ class Click:
 
         # Calculate RMSBW
         # RMSBW = (sqrt(sum((f-CF).^2.*PSD.^2 ) / sum(PSD.^2)))/1000;
-        self.rmsbw = (np.sqrt((np.sum(((self.freq - self.cf)**2) * (self.psd**2))) / np.sum(self.psd**2))) / 1000.0 
+        self.rmsbw = (np.sqrt((np.sum(((self.freq - self.cf)**2) * (self.psd**2))) / np.sum(self.psd**2))) / 1000.0
 
         # Calculate click duration based on Madsen & Walhberg 2007 - 80#
-        ener = np.cumsum(self.sound_block**2)
-        istart = np.where(ener <= (ener[-1] * 0.1))[0]          # index of where the 1.5% is
-        iend = np.where(ener <= (ener[-1] * 0.9))[0]            # index of where the 98.5% is
-        if len(istart) > 0:
-            istart = istart[-1]
-        else:
-            istart = 0
-        if len(iend) > 0: 
-            iend = iend[-1]
-        else:
-            iend = len(ener)
-        self.duration = (iend - istart) / self.fs * 1e6         # duration in microseconds
+        self.duration = get_duration(sound_block, self.fs)
                 
         # Parameters according to Mhl & Andersen, 1973 
         self.q = (self.cf / self.rmsbw) / 1000.0
@@ -589,6 +576,53 @@ class Click:
         Avoid confusion with capital and low letters 
         """
         return super().__getattribute__(name.lower())
+
+
+@nb.jit()
+def zero_pad(sound_block, nfft):
+    """
+    Return a zero-padded sound block
+    Parameters
+    ----------
+    sound_block: np.array
+    nfft : desired length
+    """
+    if sound_block.size < nfft:
+        zero_padded = np.zeros(nfft)
+        zero_padded[0:sound_block.size] = sound_block
+        sound_block = zero_padded
+    return sound_block
+
+
+@nb.jit()
+def get_duration(sound_block, fs):
+    """
+    Return the duration of the 80% of the energy of the sound block
+    Parameters
+    ----------
+    sound_block: np.array
+        Sound Block to analyze
+    fs : int
+        Sampling Frequency
+
+    Returns
+    -------
+    Duration in microseconds
+    """
+    ener = np.cumsum(sound_block ** 2)
+    istart = np.where(ener <= (ener[-1] * 0.1))[0]  # index of where the 1.5% is
+    iend = np.where(ener <= (ener[-1] * 0.9))[0]  # index of where the 98.5% is
+    if len(istart) > 0:
+        istart = istart[-1]
+    else:
+        istart = 0
+    if len(iend) > 0:
+        iend = iend[-1]
+    else:
+        iend = len(ener)
+    # duration in microseconds
+    duration = (iend - istart) / fs * 1e6
+    return duration
 
 
 class ClickConverter:

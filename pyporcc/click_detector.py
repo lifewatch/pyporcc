@@ -492,7 +492,7 @@ class TriggerFilter:
 
 
 class Click:
-    def __init__(self, sound_block, fs, timestamp, click_model_path, nfft=64, verbose=False):
+    def __init__(self, sound_block, fs, timestamp, click_model_path, nfft=512, verbose=False):
         """
         Start a porpoise click object
 
@@ -525,16 +525,12 @@ class Click:
         else:
             self.fs = fs
 
-        # [PSD,f] = periodogram(click,[],FFT,Fs,'power');
-        # %psd=abs(fft(click))
-        # PSD = PSD./max(PSD); % normalize spectrum
-        # CF = sum(f.*PSD.^2)./sum(PSD.^2);
-        # [~,indfc] = max(PSD);
-        # PF = f(indfc); 
-
-        # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file 
-        # window = sig.get_window('boxcar', self.nfft)
+        # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
         window = sig.get_window('boxcar', self.nfft)
+        if sound_block.size < self.nfft:
+            zero_padded = np.zeros(self.nfft)
+            zero_padded[0:sound_block.size] = sound_block
+            sound_block = zero_padded
         self.freq, psd = sig.periodogram(x=sound_block, window=window, nfft=self.nfft, fs=self.fs, scaling='spectrum')
 
         # Normalize spectrum

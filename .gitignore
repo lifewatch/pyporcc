@@ -9,3 +9,5 @@ __pycache__
 cosentino/
 examples/
 *.wav
+
+*egg-info*

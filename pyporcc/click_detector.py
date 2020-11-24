@@ -243,13 +243,13 @@ class ClickDetector:
             print('TOO FEW!', duration_samples)
         amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
                                        self.hydrophone.Vpp)
-        id = len(self.clips)
-        self.clips.at[id, ['datetime', 'start_sample', 'wave', 'duration_samples', 'duration_us',
-                           'amplitude', 'filename']] = [timestamp, start_sample_block + istart, clip,
-                                                        frames, frames*1e6/self.fs,
-                                                        amplitude, pathlib.Path(sound_file.name).name]
+        idx = len(self.clips)
+        self.clips.at[idx, ['datetime', 'start_sample', 'wave', 'duration_samples', 'duration_us',
+                            'amplitude', 'filename']] = [timestamp, start_sample_block + istart, clip,
+                                                         frames, frames*1e6/self.fs,
+                                                         amplitude, pathlib.Path(sound_file.name).name]
         if self.converter is not None:
-            self.clips.at[id] = self.converter.convert_row(self.clips.iloc[id], fs=sound_file.samplerate).values
+            self.clips.at[idx] = self.converter.convert_row(self.clips.iloc[idx], fs=sound_file.samplerate).values
         if verbose:
             fig, ax = plt.subplots(2, 1)
             # ax[0].plot(clip, label='Signal not filtered')
@@ -601,7 +601,7 @@ class Click:
         return super().__getattribute__(name.lower())
 
 
-@nb.jit()
+@nb.jit(nopython=True)
 def zero_pad(sound_block, nfft):
     """
     Return a zero-padded sound block
@@ -610,14 +610,14 @@ def zero_pad(sound_block, nfft):
     sound_block: np.array
     nfft : desired length
     """
-    if sound_block.size < nfft:
+    if len(sound_block) < nfft:
         zero_padded = np.zeros(nfft)
         zero_padded[0:sound_block.size] = sound_block
         sound_block = zero_padded
     return sound_block
 
 
-@nb.jit()
+@nb.njit
 def get_duration(sound_block, fs):
     """
     Return the duration of the 80% of the energy of the sound block
@@ -633,8 +633,8 @@ def get_duration(sound_block, fs):
     Duration in microseconds
     """
     ener = np.cumsum(sound_block ** 2)
-    istart = np.where(ener <= (ener[-1] * 0.1))[0]  # index of where the 1.5% is
-    iend = np.where(ener <= (ener[-1] * 0.9))[0]  # index of where the 98.5% is
+    istart = np.argwhere(ener <= (ener[-1] * 0.1))[0]  # index of where the 1.5% is
+    iend = np.argwhere(ener <= (ener[-1] * 0.9))[0]  # index of where the 98.5% is
     if len(istart) > 0:
         istart = istart[-1]
     else:

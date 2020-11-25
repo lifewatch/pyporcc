@@ -275,7 +275,7 @@ class ClickDetector:
         clips_block = pd.DataFrame(params_matrix, columns=self.columns)
         clips_block['wave'] = waves
         clips_block['datetime'] = timestamps
-        clips_block['file_name'] = filename
+        clips_block['filename'] = filename
         clips_block.start_sample = clips_block.start_sample.astype(np.int32)
 
         if self.classifier is not None:

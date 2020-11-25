@@ -375,7 +375,7 @@ class PorCC:
         df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] > self.th2), self.class_column] = 2             # LQ Clicks
         df.loc[loc_idx & (df['prob_hq'] < self.th1) & (df['prob_lq'] <= self.th2), self.class_column] = 3            # N Clicks
 
-        return df
+        return df.drop(columns=['const'])
     
     def predict(self, df):
         """

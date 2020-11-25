@@ -115,8 +115,8 @@ class ClickDetector:
             self.dfilter.fs = fs
 
         # DataFrame with all the clips
-        self.clips = pd.DataFrame(columns=['id', 'datetime', 'start_sample', 'duration_samples',
-                                           'duration_us', 'amplitude', 'filename', 'wave'])
+        self.clips = pd.DataFrame(columns=['id', 'datetime', 'filename', 'wave', 'start_sample', 'duration_samples',
+                                           'duration_us', 'amplitude'])
         self.clips = self.clips.set_index('id')
         self.columns = list(self.clips.columns)
         self.save_max = save_max
@@ -263,11 +263,11 @@ class ClickDetector:
             waves.append(clip)
             if self.converter is not None:
                 q, duration, ratio, xc, cf, bw = self.converter.click_params(clip, nfft=512)
-                params_matrix[idx, 0:len(columns) - 3] = [start_sample_block + istart, frames, frames * 1e6 / self.fs,
-                                                          amplitude, q, duration, ratio, xc, cf, bw]
+                params_matrix[idx, 3:len(columns)] = [start_sample_block + istart, frames, frames * 1e6 / self.fs,
+                                                      amplitude, q, duration, ratio, xc, cf, bw]
             else:
-                params_matrix[idx, 0:len(columns) - 3] = [start_sample_block + istart, frames,
-                                                          frames * 1e6 / self.fs, amplitude]
+                params_matrix[idx, 3:len(columns)] = [start_sample_block + istart, frames,
+                                                      frames * 1e6 / self.fs, amplitude]
             if verbose:
                 plt.figure(2, 1)
                 plt.plot(clip, label='Filtered signal')
@@ -618,7 +618,9 @@ def zero_pad(sound_block, nfft):
     Parameters
     ----------
     sound_block: np.array
-    nfft : desired length
+        Sound clip representing the possible click
+    nfft : int
+        Desired length
     """
     if len(sound_block) < nfft:
         zero_padded = np.zeros(nfft)
@@ -627,7 +629,7 @@ def zero_pad(sound_block, nfft):
     return sound_block
 
 
-@nb.jit(nopython=True, fastmath=True)
+@nb.jit(nopython=True)
 def fast_click_params(sound_block, fs, psd, freq):
     """
     Return the duration of the 80% of the energy of the sound block
@@ -647,8 +649,8 @@ def fast_click_params(sound_block, fs, psd, freq):
     Duration in microseconds
     """
     ener = np.cumsum(sound_block ** 2)
-    istart_list = np.argwhere(ener <= (ener[-1] * 0.1))[0]  # index of where the 1.% is
-    iend_list = np.argwhere(ener <= (ener[-1] * 0.9))[0]  # index of where the 98% is
+    istart_list = np.where(ener <= (ener[-1] * 0.1))[0]  # index of where the 1.% is
+    iend_list = np.where(ener <= (ener[-1] * 0.9))[0]  # index of where the 98% is
     if len(istart_list) > 0:
         istart = istart_list[-1]
     else:

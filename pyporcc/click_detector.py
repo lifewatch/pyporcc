@@ -216,7 +216,7 @@ class ClickDetector:
         # Filter the signal
         filtered_signal = self.dfilter(signal)
         clips_block = self.clicks_block(filtered_signal, date, sound_file.name, start_sample, clips_list)
-        self.clips = self.clips.append(clips_block, ignore_index=True)
+        self.clips = self.clips.append(clips_block, ignore_index=True, sort=False)
 
         # If longer than maximum, save it
         if len(self.clips) >= self.save_max:

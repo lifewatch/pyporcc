@@ -138,8 +138,6 @@ class ClickDetector:
             self.converter = None
 
         self.saved_files = []
-        # Smaller dataframe to speed up the assign process
-        self._clips = self.clips.copy()
 
     def __setitem__(self, key, value):
         """
@@ -215,16 +213,14 @@ class ClickDetector:
         date += dt.timedelta(seconds=start_sample/sound_file.samplerate)
         # Filter the signal
         filtered_signal = self.dfilter(signal)
-        for clip in clips_list:
-            self.add_click_clip(filtered_signal, sound_file, date, start_sample, clip[0], clip[1])
-        self.clips = self.clips.append(self._clips, ignore_index=True)
+        clips_block = self.clicks_block(filtered_signal, sound_file, date, start_sample, clips_list)
+        self.clips = self.clips.append(clips_block, ignore_index=True)
 
         # If longer than maximum, save it
         if len(self.clips) >= self.save_max:
             self.save_clips()
 
-    def add_click_clip(self, signal, sound_file, date, start_sample_block, start_sample,
-                       duration_samples=0, verbose=False):
+    def clicks_block(self, signal, sound_file, date, start_sample_block, clips_list, verbose=False):
         """
         Add the clip to the clip dictionary
 
@@ -245,38 +241,48 @@ class ClickDetector:
         verbose : bool
             Set to True if plots are wanted
         """
-        timestamp = date + dt.timedelta(seconds=start_sample/sound_file.samplerate)
-        # Read the clip 
-        istart = max(0, start_sample - self.pre_samples)
-        frames = min(start_sample - istart + duration_samples + self.post_samples, signal.size)
-        clip = signal[istart:istart+frames]
-
-        if duration_samples < 10:
-            print('TOO FEW!', duration_samples)
-        amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
-                                       self.hydrophone.Vpp)
-        idx = len(self.clips)
-
-        if self.converter is not None:
-            q, duration, ratio, xc, cf, bw = self.converter._click_params(clip, nfft=512)
-            self._clips.at[idx] = [timestamp, start_sample_block + istart,
-                                                             frames, frames * 1e6 / self.fs,
-                                                             amplitude, pathlib.Path(sound_file.name).name, clip,
-                                                            q, duration, ratio, xc, cf, bw]
+        if self.classifier is not None:
+            columns = self.columns + self.converter.click_vars
         else:
-            self._clips.at[idx] = [timestamp, start_sample_block + istart,
-                                                             frames, frames * 1e6 / self.fs,
-                                                             amplitude, pathlib.Path(sound_file.name).name, clip]
-        if verbose:
-            fig, ax = plt.subplots(2, 1)
-            # ax[0].plot(clip, label='Signal not filtered')
-            ax[1].plot(clip, label='Filtered signal')
-            # ax[0].set_title('Signal not filtered')
-            ax[1].set_title('Signal filtered')
-            plt.legend()
-            plt.tight_layout()
-            plt.show()
-            plt.close()
+            columns = self.columns
+        clips_block = pd.DataFrame(columns=columns)
+        for clip in clips_list:
+            start_sample = clip[0]
+            duration_samples = clip[1]
+            timestamp = date + dt.timedelta(seconds=start_sample/sound_file.samplerate)
+            # Read the clip
+            istart = max(0, start_sample - self.pre_samples)
+            frames = min(start_sample - istart + duration_samples + self.post_samples, signal.size)
+            clip = signal[istart:istart+frames]
+
+            if duration_samples < 10:
+                print('TOO FEW!', duration_samples)
+            amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
+                                           self.hydrophone.Vpp)
+            idx = len(clips_block)
+
+            if self.converter is not None:
+                q, duration, ratio, xc, cf, bw = self.converter._click_params(clip, nfft=512)
+                clips_block.at[idx] = [timestamp, start_sample_block + istart,
+                                                                 frames, frames * 1e6 / self.fs,
+                                                                 amplitude, pathlib.Path(sound_file.name).name, clip,
+                                                                q, duration, ratio, xc, cf, bw]
+            else:
+                clips_block.at[idx] = [timestamp, start_sample_block + istart,
+                                                                 frames, frames * 1e6 / self.fs,
+                                                                 amplitude, pathlib.Path(sound_file.name).name, clip]
+            if verbose:
+                fig, ax = plt.subplots(2, 1)
+                # ax[0].plot(clip, label='Signal not filtered')
+                ax[1].plot(clip, label='Filtered signal')
+                # ax[0].set_title('Signal not filtered')
+                ax[1].set_title('Signal filtered')
+                plt.legend()
+                plt.tight_layout()
+                plt.show()
+                plt.close()
+
+        return clips_block
 
     def detect_click_clips_file(self, sound_file_path, blocksize=None):
         """

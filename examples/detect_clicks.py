@@ -12,7 +12,7 @@ from pyporcc import porcc
 # CONFIG
 
 # Sound Files
-sound_folder = pathlib.Path("C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/")
+sound_folder = pathlib.Path("C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/test2")
 sound_file = pathlib.Path('../pyporcc/data/738496579.150824180131.wav')
 save_folder = pathlib.Path('C:/Users/cleap/Documents/Data/Clicks/pyporcc/test/')
 include_subfolders = True

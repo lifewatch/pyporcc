@@ -568,30 +568,10 @@ class Click:
         else:
             self.fs = fs
 
-        # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
-        window = sig.get_window('boxcar', self.nfft)
-        sound_block = zero_pad(sound_block, self.nfft)
-        self.freq, psd = sig.periodogram(x=sound_block, window=window, nfft=self.nfft, fs=self.fs, scaling='spectrum')
-
-        self.duration, self.cf, self.pf, self.q, self.ratio = fast_click_params(sound_block, fs, psd, self.freq)
-
-        # Calculate -3dB bandwith: Consecutive frequencies of the psd that have more than half of the maximum freq power
-        half = np.max(psd) / (10 ** (3 / 10.0))
-        max_freq_i = psd.argmax()
-        i = np.where(psd[0:max_freq_i] <= half)[0][-1]
-        inter = interpolate.interp1d(psd[i: i + 2], self.freq[i: i + 2])
-        f_left = inter(half)
-
-        i = np.where(psd[max_freq_i + 1::] <= half)[0][0] + max_freq_i + 1
-        inter = interpolate.interp1d(psd[i - 1: i + 1], self.freq[i - 1: i + 1])
-        f_right = inter(half)
-
-        self.bw = (f_right - f_left) / 1000.0
-
-        # Calculate the correlation with the model
-        x_coeff = np.correlate(self.sound_block, self.click_model, mode='same')
-        self.xc = np.max(x_coeff)
-
+        self.q, self.duration, self.ratio, self.xc, self.cf, self.bw, psd, self.freq = click_params(sound_block,
+                                                                                                    self.fs,
+                                                                                                    self.click_model,
+                                                                                                    nfft)
         if verbose:
             fig, ax = plt.subplots(2, 1)
             ax[0].plot(self.sound_block)
@@ -671,6 +651,33 @@ def fast_click_params(sound_block, fs, psd, freq):
     ratio = pf / cf
 
     return duration, cf, pf, q, ratio
+
+
+def click_params(sound_block, fs, click_model, nfft):
+    # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
+    window = sig.get_window('boxcar', nfft)
+    sound_block = zero_pad(sound_block, nfft)
+    freq, psd = sig.periodogram(x=sound_block, window=window, nfft=nfft, fs=fs, scaling='spectrum')
+
+    # Calculate -3dB bandwidth:
+    # Consecutive frequencies of the psd that have more than half of the maximum freq power
+    half = np.max(psd) / (10 ** (3 / 10.0))
+    max_freq_i = psd.argmax()
+    i = np.where(psd[0:max_freq_i] <= half)[0][-1]
+    inter = interpolate.interp1d(psd[i: i + 2], freq[i: i + 2])
+    f_left = inter(half)
+
+    i = np.where(psd[max_freq_i + 1::] <= half)[0][0] + max_freq_i + 1
+    inter = interpolate.interp1d(psd[i - 1: i + 1], freq[i - 1: i + 1])
+    f_right = inter(half)
+    bw = (f_right - f_left) / 1000.0
+
+    # Calculate the correlation with the model
+    x_coeff = np.correlate(sound_block, click_model)
+    xc = np.max(x_coeff)
+
+    duration, cf, pf, q, ratio = fast_click_params(sound_block, fs, psd, freq)
+    return q, duration, ratio, xc, cf, bw, psd, freq
 
 
 class ClickConverter:
@@ -771,29 +778,7 @@ class ClickConverter:
         return row
 
     def click_params(self, sound_block, nfft=512):
-        # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
-        window = sig.get_window('boxcar', nfft)
-        sound_block = zero_pad(sound_block, nfft)
-        freq, psd = sig.periodogram(x=sound_block, window=window, nfft=nfft, fs=self.fs, scaling='spectrum')
-
-        # Calculate -3dB bandwidth:
-        # Consecutive frequencies of the psd that have more than half of the maximum freq power
-        half = np.max(psd) / (10 ** (3 / 10.0))
-        max_freq_i = psd.argmax()
-        i = np.where(psd[0:max_freq_i] <= half)[0][-1]
-        inter = interpolate.interp1d(psd[i: i + 2], freq[i: i + 2])
-        f_left = inter(half)
-
-        i = np.where(psd[max_freq_i + 1:-1] <= half)[0][0] + max_freq_i + 1
-        inter = interpolate.interp1d(psd[i - 1: i + 1], freq[i - 1: i + 1])
-        f_right = inter(half)
-        bw = (f_right - f_left) / 1000.0
-
-        # Calculate the correlation with the model
-        x_coeff = np.correlate(sound_block, self.click_model)
-        xc = np.max(x_coeff)
-
-        duration, cf, pf, q, ratio = fast_click_params(sound_block, self.fs, psd, freq)
+        q, duration, ratio, xc, cf, bw, _, _ = click_params(sound_block, self.fs, self.click_model, nfft)
         return q, duration, ratio, xc, cf, bw
 
     @staticmethod

@@ -582,7 +582,7 @@ class Click:
         inter = interpolate.interp1d(psd[i: i + 2], self.freq[i: i + 2])
         f_left = inter(half)
 
-        i = np.where(psd[max_freq_i + 1:-1] <= half)[0][0] + max_freq_i + 1
+        i = np.where(psd[max_freq_i + 1::] <= half)[0][0] + max_freq_i + 1
         inter = interpolate.interp1d(psd[i - 1: i + 1], self.freq[i - 1: i + 1])
         f_right = inter(half)
 

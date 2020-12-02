@@ -115,7 +115,7 @@ class ClickDetector:
             self.dfilter.fs = fs
 
         self.save_max = save_max
-        self.save_folder = pathlib.Path(save_folder)
+        self.save_folder = save_folder
         self.save_noise = save_noise
 
         self.columns = ['id', 'datetime', 'filename', 'wave', 'start_sample', 'duration_samples',
@@ -149,6 +149,8 @@ class ClickDetector:
             self.prefilter.fs = value
             if self.converter is not None:
                 self.converter.fs = value
+        elif key == 'save_folder':
+            value = pathlib.Path(value)
         self.__dict__[key] = value
 
     @staticmethod

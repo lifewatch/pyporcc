@@ -705,14 +705,14 @@ class ClickConverter:
             self.click_vars = click_vars
 
     def __setattr__(self, key, value):
-        if key == 'fs':
-            if self.fs_model != value:
-                click_model, fs_model = sf.read(self.click_model_path)
-                print('This click is not recorded at the same frequency than the classified data! '
-                      'Resampling to %s S/s' % value)
-                new_samples = int(np.ceil(click_model.size / fs_model * value))
-                self.click_model = sig.resample(click_model, new_samples)
-                self.fs_model = value
+        # if key == 'fs':
+        #     if self.fs_model != value:
+        #         click_model, fs_model = sf.read(self.click_model_path)
+        #         print('This click is not recorded at the same frequency than the classified data! '
+        #               'Resampling to %s S/s' % value)
+        #         new_samples = int(np.ceil(click_model.size / fs_model * value))
+        #         self.click_model = sig.resample(click_model, new_samples)
+        #         self.fs_model = value
         self.__dict__[key] = value
 
     def clicks_df(self, df, nfft=512, save_path=None):

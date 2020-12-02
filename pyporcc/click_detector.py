@@ -86,7 +86,6 @@ class ClickDetector:
         # Detector parameters
         self.pre_samples = pre_samples
         self.post_samples = post_samples
-        self.fs = fs
 
         real_min_length = min_length - post_samples - pre_samples
         real_max_length = max_length - post_samples - pre_samples
@@ -128,7 +127,7 @@ class ClickDetector:
             if click_model_path is None:
                 with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
                     print('Setting the click model path to default...')
-            self.converter = ClickConverter(click_model_path=click_model_path, fs=self.fs)
+            self.converter = ClickConverter(click_model_path=click_model_path, fs=fs)
             self.columns += self.converter.click_vars
         else:
             self.converter = None
@@ -140,7 +139,9 @@ class ClickDetector:
         self.clips = self.clips.set_index('id')
         self.columns.remove('id')
 
-    def __setitem__(self, key, value):
+        self.fs = fs
+
+    def __setattr__(self, key, value):
         """
         If the sampling frequency of the sound is different than the one from the filters, update the filters 
         """
@@ -695,15 +696,8 @@ class ClickConverter:
             List of the output parameters to compute for each click
         """
         self.click_model_path = click_model_path
-        self.click_model, fs_model = sf.read(click_model_path)
-        if fs_model != fs:
-            print('This click is not recorded at the same frequency than the classified data! '
-                  'Resampling to %s S/s' % fs)
-            new_samples = int(np.ceil(self.click_model.size / fs_model * fs))
-            self.click_model = sig.resample(self.click_model, new_samples)
-            self.fs = fs
-        else:
-            self.fs = fs
+        self.click_model, self.fs_model = sf.read(click_model_path)
+        self.fs = fs
 
         if click_vars is None:
             self.click_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
@@ -712,12 +706,13 @@ class ClickConverter:
 
     def __setattr__(self, key, value):
         if key == 'fs':
-            self.click_model, fs_model = sf.read(self.click_model_path)
-            if fs_model != value:
+            if self.fs_model != value:
+                click_model, fs_model = sf.read(self.click_model_path)
                 print('This click is not recorded at the same frequency than the classified data! '
                       'Resampling to %s S/s' % value)
-                new_samples = int(np.ceil(self.click_model.size / fs_model * value))
-                self.click_model = sig.resample(self.click_model, new_samples)
+                new_samples = int(np.ceil(click_model.size / fs_model * value))
+                self.click_model = sig.resample(click_model, new_samples)
+                self.fs_model = value
         self.__dict__[key] = value
 
     def clicks_df(self, df, nfft=512, save_path=None):

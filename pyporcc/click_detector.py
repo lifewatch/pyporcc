@@ -180,12 +180,18 @@ class ClickDetector:
         """
         Save the clips in a file
         """
-        # self.clips.filename = self.clips.filename.astype(str)
-        # self.clips.datetime = self.clips.datetime.astype(str)
-        clips_filename_parquet = self.save_folder.joinpath('Detected_Clips_%s.parquet.gzip' %
-                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
-        clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
+        # clips_filename_parquet = self.save_folder.joinpath('%s_clips.parquet.gzip' %
+        #                                                 self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+        clips_filename_h5 = self.save_folder.joinpath('%s_clips.h5' %
                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+        waves_filename_h5 = self.save_folder.joinpath('%s_waves.h5' %
+                                                       self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+        clips_filename_csv = self.save_folder.joinpath('%s_clips.csv' %
+                                                       self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+
+        self.clips.filename = self.clips.filename.astype(str)
+        self.clips.datetime = self.clips.datetime.astype(str)
+        self.clips.start_sample = self.clips.start_sample.astype(int)
         # Save everything in the file
         if self.classifier is not None:
             if not self.save_noise:
@@ -197,9 +203,15 @@ class ClickDetector:
 
         csv_df = csv_df.drop(columns=['wave'])
         csv_df.to_csv(clips_filename_csv)
-        self.clips.to_parquet(clips_filename_parquet, compression='gzip')
+
+        vlen_type = h5py.special_dtype(vlen=np.float32)
+        f = h5py.File(waves_filename_h5, 'w')
+        f.create_dataset('/waves', data=self.clips.wave.values, dtype=vlen_type)
+        f.close()
+        self.clips.drop(columns=['wave']).to_hdf(clips_filename_h5, key='clips', format='table')
+        # self.clips.to_parquet(clips_filename_parquet, compression='gzip')
         self.clips.drop(index=self.clips.index, inplace=True)
-        self.saved_files.append(clips_filename_parquet)
+        self.saved_files.append(clips_filename_h5)
 
     def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
         """

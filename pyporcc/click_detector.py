@@ -12,6 +12,7 @@ __credits__ = "Clea Parcerisas"
 __email__ = "clea.parcerisas@vliz.be"
 __status__ = "Development"
 
+import sys
 import datetime as dt
 import pathlib
 import zipfile
@@ -25,6 +26,7 @@ import soundfile as sf
 from scipy import interpolate
 from scipy import signal as sig
 from tqdm import tqdm
+import h5py
 
 from pyporcc import utils
 
@@ -178,11 +180,13 @@ class ClickDetector:
         """
         Save the clips in a file
         """
-        clips_filename_pkl = self.save_folder.joinpath('Detected_Clips_%s.pkl' %
-                                                       self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+        # self.clips.filename = self.clips.filename.astype(str)
+        # self.clips.datetime = self.clips.datetime.astype(str)
+        clips_filename_parquet = self.save_folder.joinpath('Detected_Clips_%s.parquet.gzip' %
+                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
         clips_filename_csv = self.save_folder.joinpath('Detected_Clicks_%s.csv' %
                                                        self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
-        # Save everything in the pickle
+        # Save everything in the file
         if self.classifier is not None:
             if not self.save_noise:
                 csv_df = self.clips.drop(index=self.clips.loc[self.clips[self.classifier.class_column] == 3].index)
@@ -192,10 +196,10 @@ class ClickDetector:
             csv_df = self.clips
 
         csv_df = csv_df.drop(columns=['wave'])
-        self.clips.to_pickle(clips_filename_pkl)
         csv_df.to_csv(clips_filename_csv)
+        self.clips.to_parquet(clips_filename_parquet, compression='gzip')
         self.clips.drop(index=self.clips.index, inplace=True)
-        self.saved_files.append(clips_filename_pkl)
+        self.saved_files.append(clips_filename_parquet)
 
     def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
         """
@@ -257,15 +261,16 @@ class ClickDetector:
             clip = signal[istart:istart + frames]
             amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
                                            self.hydrophone.Vpp)
+            clip = utils.to_upa(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain, self.hydrophone.Vpp)
             timestamps.append(timestamp)
             waves.append(clip)
             if self.converter is not None:
                 q, duration, ratio, xc, cf, bw = self.converter.click_params(clip, nfft=512)
                 params_matrix[idx, 3:len(self.columns)] = [start_sample_block + istart, frames, frames * 1e6 / self.fs,
-                                                      amplitude, q, duration, ratio, xc, cf, bw]
+                                                           amplitude, q, duration, ratio, xc, cf, bw]
             else:
                 params_matrix[idx, 3:len(self.columns)] = [start_sample_block + istart, frames,
-                                                      frames * 1e6 / self.fs, amplitude]
+                                                           frames * 1e6 / self.fs, amplitude]
             if verbose:
                 plt.figure(2, 1)
                 plt.plot(clip, label='Filtered signal')
@@ -371,7 +376,7 @@ class ClickDetector:
         for f in self.saved_files:
             df = pd.read_pickle(f)
             df = self.classifier.classify_matrix(df)
-            df.to_pickle(f)
+            df.to_hdf5(f, mode='w', key='clips')
 
 
 spec = [
@@ -589,7 +594,7 @@ class Click:
         return super().__getattribute__(name.lower())
 
 
-@nb.njit
+# @nb.njit
 def zero_pad(sound_block, nfft):
     """
     Return a zero-padded sound block
@@ -627,8 +632,8 @@ def fast_click_params(sound_block, fs, psd, freq):
     Duration in microseconds
     """
     ener = np.cumsum(sound_block ** 2)
-    istart_list = np.where(ener <= (ener[-1] * 0.1))[0]  # index of where the 1.% is
-    iend_list = np.where(ener <= (ener[-1] * 0.9))[0]  # index of where the 98% is
+    istart_list = np.where(ener <= (ener[-1] * 0.1))[0]  # index of where the 10% is
+    iend_list = np.where(ener <= (ener[-1] * 0.9))[0]  # index of where the 90% is
     if len(istart_list) > 0:
         istart = istart_list[-1]
     else:
@@ -656,30 +661,77 @@ def fast_click_params(sound_block, fs, psd, freq):
     return duration, cf, pf, q, ratio
 
 
-def click_params(sound_block, fs, click_model, nfft):
-    # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
-    window = sig.get_window('boxcar', nfft)
-    sound_block = zero_pad(sound_block, nfft)
-    freq, psd = sig.periodogram(x=sound_block, window=window, nfft=nfft, fs=fs, scaling='spectrum')
+def powerbw(x, fs):
+    """
+    Calculate -3dB bandwidth imitating MATLAB powerbw
+    Parameters
+    ----------
+    x : np.array
+        Signal to process
+    fs : int
+        Sampling frequency
 
-    # Calculate -3dB bandwidth:
+    Returns
+    -------
+    -3dB Bandwidth in kHz
+    """
+    beta = 0
+    freq, psd = sig.periodogram(x=x, fs=fs, window=('kaiser', beta), scaling='spectrum',
+                                return_onesided=False)
+
     # Consecutive frequencies of the psd that have more than half of the maximum freq power
-    half = np.max(psd) / (10 ** (3 / 10.0))
-    max_freq_i = psd.argmax()
-    i = np.where(psd[0:max_freq_i] <= half)[0][-1]
-    inter = interpolate.interp1d(psd[i: i + 2], freq[i: i + 2])
-    f_left = inter(half)
+    r = 10 * np.log10(0.5)
+    half = np.max(psd) * (10 ** (r / 10))
+    i_center = psd.argmax()
 
-    i = np.where(psd[max_freq_i + 1::] <= half)[0][0] + max_freq_i + 1
-    inter = interpolate.interp1d(psd[i - 1: i + 1], freq[i - 1: i + 1])
-    f_right = inter(half)
-    bw = (f_right - f_left) / 1000.0
+    i_l = np.where(psd[0:i_center] <= half)[0]
+    i_r = np.where(psd[i_center:-1] <= half)[0]
+
+    if len(i_l) == 0:
+        f_lo = freq[0]
+    else:
+        i_l = i_l[-1]
+        psd_points = np.log10([max(psd[i_l], sys.float_info.min), max(psd[i_l+1], sys.float_info.min)])
+        inter = interpolate.interp1d(psd_points, freq[i_l: i_l + 2])
+        f_lo = inter(np.log10(half))
+
+    if len(i_r) == 0:
+        f_hi = freq[-1]
+    else:
+        i_r = i_r[0] + i_center
+        psd_points = np.log10([max(psd[i_r - 1], sys.float_info.min), max(psd[i_r], sys.float_info.min)])
+        inter = interpolate.interp1d(psd_points, freq[i_r - 1: i_r + 1])
+        f_hi = inter(np.log10(half))
+
+    bw = (f_hi - f_lo) / 1000.0
+
+    return bw
+
+
+def click_params(sound_block, fs, click_model, nfft):
+    """
+    Return the click parameters necessary to classify the click using PorCC
+    Parameters
+    ----------
+    sound_block
+    fs
+    click_model
+    nfft
+
+    Returns
+    -------
+
+    """
+    # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
+    sound_block_padded = zero_pad(sound_block, nfft)
+    freq, psd = sig.periodogram(x=sound_block_padded, fs=fs, nfft=nfft, scaling='spectrum')
+    duration, cf, pf, q, ratio = fast_click_params(sound_block, fs, psd, freq)
+    bw = powerbw(sound_block, fs)
 
     # Calculate the correlation with the model
     x_coeff = np.correlate(sound_block, click_model)
     xc = np.max(x_coeff)
 
-    duration, cf, pf, q, ratio = fast_click_params(sound_block, fs, psd, freq)
     return q, duration, ratio, xc, cf, bw, psd, freq
 
 
@@ -705,14 +757,14 @@ class ClickConverter:
             self.click_vars = click_vars
 
     def __setattr__(self, key, value):
-        # if key == 'fs':
-        #     if self.fs_model != value:
-        #         click_model, fs_model = sf.read(self.click_model_path)
-        #         print('This click is not recorded at the same frequency than the classified data! '
-        #               'Resampling to %s S/s' % value)
-        #         new_samples = int(np.ceil(click_model.size / fs_model * value))
-        #         self.click_model = sig.resample(click_model, new_samples)
-        #         self.fs_model = value
+        if key == 'fs':
+            if self.fs_model != value:
+                click_model, fs_model = sf.read(self.click_model_path)
+                print('This click is not recorded at the same frequency than the classified data! '
+                      'Resampling to %s S/s' % value)
+                new_samples = int(np.ceil(click_model.size / fs_model * value))
+                self.click_model = sig.resample(click_model, new_samples)
+                self.fs_model = value
         self.__dict__[key] = value
 
     def clicks_df(self, df, nfft=512, save_path=None):
@@ -729,11 +781,13 @@ class ClickConverter:
             Path to the desired save file. If None, it is not saved
         """
         # Calculate all the independent variables and append them to the df
-        for var in self.click_vars:
-            df[var] = 0.00
+        params_matrix = np.zeros((len(df), len(self.click_vars)))
 
         for idx in df.index:
-            self.add_params_to_row(df.loc[idx], nfft)
+            row = df.iloc[idx]
+            params_matrix[idx, :] = self.click_params(row['wave'], nfft=512)
+
+        df[self.click_vars] = params_matrix
 
         # Keep the metadata
         df.fs = df.fs
@@ -746,6 +800,8 @@ class ClickConverter:
                 df.to_pickle(save_path)
             elif extension == 'csv':
                 df.drop(['wave'], axis=1).to_csv(save_path)
+            elif extension == 'hdf5':
+                df.to_hdf(save_path, mode='w', key='clips')
             else:
                 raise Exception('The extension %s is unkown' % extension)
 

@@ -28,15 +28,33 @@ def aic_score(y, y_prob, n_features):
 
 
 @nb.jit
+def to_upa(wave, sensitivity, preamp_gain, Vpp):
+    """
+    Return the wave in db
+    Parameters
+    ----------
+    wave
+    sensitivity
+    preamp_gain
+    Vpp
+
+    Returns
+    -------
+    The same wave converted to upa
+    """
+    mv = 10 ** (sensitivity / 20.0) * REF
+    ma = 10 ** (preamp_gain / 20.0) * REF
+    gain_upa = (Vpp / 2.0) / (mv * ma)
+    return wave * gain_upa
+
+
+@nb.jit
 def amplitude_db(wave, sensitivity, preamp_gain, Vpp):
     """
     Calculate the amplitude
     """
     a = np.abs(wave).max()
-    mv = 10 ** (sensitivity / 20.0) * REF
-    ma = 10 ** (preamp_gain / 20.0) * REF
-    gain_upa = (Vpp / 2.0) / (mv * ma)
-    return 10*np.log10((a * gain_upa)**2 / REF)
+    return 10*np.log10(to_upa(a, sensitivity, preamp_gain, Vpp))
 
 
 def constrain(x, lower, upper):

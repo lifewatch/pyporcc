@@ -218,7 +218,10 @@ class ClickDetector:
         """
         sound_file.seek(start_sample)
         signal = sound_file.read(frames=blocksize)
-        date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
+        try:
+            date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
+        except:
+            date = dt.datetime.now()
         date += dt.timedelta(seconds=start_sample / sound_file.samplerate)
         # Filter the signal
         filtered_signal = self.dfilter(signal)
@@ -594,7 +597,7 @@ class Click:
         return super().__getattribute__(name.lower())
 
 
-# @nb.njit
+@nb.njit
 def zero_pad(sound_block, nfft):
     """
     Return a zero-padded sound block
@@ -720,7 +723,7 @@ def click_params(sound_block, fs, click_model, nfft):
 
     Returns
     -------
-
+    Q, duration, ratio, XC, CF, BW, psd and freq
     """
     # Calculate PSD, freq, centrum-freq (cf), peak-freq (pf) of the sound file
     sound_block_padded = zero_pad(sound_block, nfft)

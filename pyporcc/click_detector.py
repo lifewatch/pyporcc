@@ -266,6 +266,7 @@ class ClickDetector:
         params_matrix = np.zeros((len(clips_list), len(self.columns)))
         timestamps = []
         waves = []
+        signal_upa = utils.to_upa(signal, self.hydrophone.sensitivity, self.hydrophone.preamp_gain, self.hydrophone.Vpp)
         for idx, clip in enumerate(clips_list):
             start_sample = clip[0]
             duration_samples = clip[1]
@@ -273,10 +274,8 @@ class ClickDetector:
             # Read the clip
             istart = max(0, start_sample - self.pre_samples)
             frames = min(start_sample - istart + duration_samples + self.post_samples, signal.size)
-            clip = signal[istart:istart + frames]
-            amplitude = utils.amplitude_db(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
-                                           self.hydrophone.Vpp)
-            clip = utils.to_upa(clip, self.hydrophone.sensitivity, self.hydrophone.preamp_gain, self.hydrophone.Vpp)
+            clip = signal_upa[istart:istart + frames]
+            amplitude = utils.amplitude_db(clip)
             timestamps.append(timestamp)
             waves.append(clip)
             if self.converter is not None:

@@ -49,12 +49,34 @@ def to_upa(wave, sensitivity, preamp_gain, Vpp):
 
 
 @nb.jit
-def amplitude_db(wave, sensitivity, preamp_gain, Vpp):
+def amplitude_db(clip):
     """
-    Calculate the amplitude
+    Return the amplitude of the clip
+    Parameters
+    ----------
+    clip : np.array
+        Signal
+    Returns
+    -------
+    The maximum amplitude of the clip in db
     """
-    a = np.abs(wave).max()
-    return 10*np.log10(to_upa(a, sensitivity, preamp_gain, Vpp))
+    return to_db(np.max(np.abs(clip)))
+
+
+@nb.jit
+def to_db(wave):
+    """
+    Convert the wave to db
+    Parameters
+    ----------
+    wave : np.array
+        wave to compute
+
+    Returns
+    -------
+    wave in db
+    """
+    return 10*np.log10(wave**2)
 
 
 def constrain(x, lower, upper):

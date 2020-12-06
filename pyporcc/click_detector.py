@@ -233,7 +233,7 @@ class ClickDetector:
         try:
             date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
         except:
-            date = dt.datetime.now()
+            date = dt.datetime(1900, 1, 1, 0, 0, 0)
         date += dt.timedelta(seconds=start_sample / sound_file.samplerate)
         # Filter the signal
         filtered_signal = self.dfilter(signal)

@@ -213,7 +213,7 @@ class ClickDetector:
         self.clips.drop(index=self.clips.index, inplace=True)
         self.saved_files.append(clips_filename_h5)
 
-    def add_click_clips(self, start_sample, blocksize, sound_file, clips_list):
+    def add_click_clips(self, start_sample, date, blocksize, sound_file, clips_list):
         """
         Add all the clips list to the dictionary
 
@@ -221,6 +221,8 @@ class ClickDetector:
         ----------
         start_sample : int
             Sample of the file where the block starts
+        date : datetime object
+            Datetime where the sound_file starts
         blocksize : int
             Number of frames to read in the block
         sound_file : SoundFile object
@@ -230,10 +232,7 @@ class ClickDetector:
         """
         sound_file.seek(start_sample)
         signal = sound_file.read(frames=blocksize)
-        try:
-            date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
-        except:
-            date = dt.datetime(1900, 1, 1, 0, 0, 0)
+
         date += dt.timedelta(seconds=start_sample / sound_file.samplerate)
         # Filter the signal
         filtered_signal = self.dfilter(signal)
@@ -274,10 +273,11 @@ class ClickDetector:
             # Read the clip
             istart = max(0, start_sample - self.pre_samples)
             frames = min(start_sample - istart + duration_samples + self.post_samples, signal.size)
-            clip = signal_upa[istart:istart + frames]
-            amplitude = utils.amplitude_db(clip)
+            clip_upa = signal_upa[istart:istart + frames]
+            clip = signal[istart:istart + frames]
+            amplitude = utils.amplitude_db(clip_upa)
             timestamps.append(timestamp)
-            waves.append(clip)
+            waves.append(clip_upa)
             if self.converter is not None:
                 q, duration, ratio, xc, cf, bw = self.converter.click_params(clip, nfft=512)
                 params_matrix[idx, 3:len(self.columns)] = [start_sample_block + istart, frames, frames * 1e6 / self.fs,
@@ -304,7 +304,7 @@ class ClickDetector:
             clips_block = self.classifier.classify_matrix(clips_block)
         return clips_block
 
-    def detect_click_clips_file(self, sound_file_path, blocksize=None):
+    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None):
         """
         Return the possible clips containing clicks
 
@@ -316,6 +316,9 @@ class ClickDetector:
             Number of samples to process at a time, if None it will be the length of the file.
             If the blocksize is too small (smaller than 1 period of the lowest frequency of the filter)
             it will affect the results
+        date : datetime object
+            Date where the file starts. If no date it will be read from the file name.
+            Otherwise it will be set up to 01/01/1900 0:0:0
         """
         # Open file
         sound_file = sf.SoundFile(sound_file_path, 'r')
@@ -334,6 +337,13 @@ class ClickDetector:
         n_off = 0
         click_on = False
 
+        # Get the initial date of the file
+        if date is None:
+            try:
+                date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
+            except:
+                date = dt.datetime(1900, 1, 1, 0, 0, 0)
+
         # Read the file by blocks
         for block_n, block in enumerate(tqdm(sound_file.blocks(blocksize=blocksize, always_2d=True),
                                              total=sound_file.frames / blocksize, desc='file', leave=False)):
@@ -341,7 +351,7 @@ class ClickDetector:
 
             # Read samples one by one, apply filter
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
-            self.add_click_clips(block_n * blocksize, blocksize, sound_file, clips)
+            self.add_click_clips(block_n * blocksize, date, blocksize, sound_file, clips)
 
         return self.clips
 
@@ -367,6 +377,7 @@ class ClickDetector:
             files_list = folder_path.namelist()
         else:
             files_list = sorted(folder_path.glob('*.wav'))
+
         for file_name in tqdm(files_list, total=len(files_list), desc='folder'):
             if file_name.suffix == '.wav':
                 # Get the wav
@@ -743,7 +754,7 @@ def click_params(sound_block, fs, click_model, nfft):
     bw = powerbw(sound_block, fs)
 
     # Calculate the correlation with the model
-    x_coeff = np.correlate(sound_block, click_model)
+    x_coeff = np.correlate(sound_block, click_model, mode='same')
     xc = np.max(x_coeff)
 
     return q, duration, ratio, xc, cf, bw, psd, freq
@@ -799,7 +810,7 @@ class ClickConverter:
 
         for idx in df.index:
             row = df.iloc[idx]
-            params_matrix[idx, :] = self.click_params(row['wave'], nfft=512)
+            params_matrix[idx, :] = self.click_params(row['wave'], nfft=nfft)
 
         df[self.click_vars] = params_matrix
 

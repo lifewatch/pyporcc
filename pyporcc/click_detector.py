@@ -183,11 +183,11 @@ class ClickDetector:
         # clips_filename_parquet = self.save_folder.joinpath('%s_clips.parquet.gzip' %
         #                                                 self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
         clips_filename_h5 = self.save_folder.joinpath('%s_clips.h5' %
-                                                       self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+                                                       self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
         waves_filename_h5 = self.save_folder.joinpath('%s_waves.h5' %
-                                                       self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+                                                       self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
         clips_filename_csv = self.save_folder.joinpath('%s_clips.csv' %
-                                                       self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
+                                                       self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
 
         self.clips.filename = self.clips.filename.astype(str)
         self.clips.datetime = self.clips.datetime.astype(str)

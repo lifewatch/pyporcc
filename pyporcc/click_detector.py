@@ -126,9 +126,6 @@ class ClickDetector:
             if not self.check_classifier(classifier):
                 raise TypeError('This classifier does not have a function to classify clicks!')
         if convert:
-            if click_model_path is None:
-                with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
-                    print('Setting the click model path to default...')
             self.converter = ClickConverter(click_model_path=click_model_path, fs=fs)
             self.columns += self.converter.click_vars
         else:
@@ -761,7 +758,7 @@ def click_params(sound_block, fs, click_model, nfft):
 
 
 class ClickConverter:
-    def __init__(self, click_model_path, fs, click_vars=None):
+    def __init__(self, fs, click_model_path=None, click_vars=None):
         """
         Init the click converter
 
@@ -772,7 +769,10 @@ class ClickConverter:
         click_vars : list of strings
             List of the output parameters to compute for each click
         """
-        self.click_model_path = click_model_path
+        if click_model_path is None:
+            with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
+                print('Setting the click model path to default...')
+                self.click_model_path = click_model_path
         self.click_model, self.fs_model = sf.read(click_model_path)
         self.fs = fs
 

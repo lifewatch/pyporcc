@@ -607,7 +607,7 @@ class Filter:
 
 
 class ClickDetectorSoundTrapHF(ClickDetector):
-    def __init__(self, hydrophone=None, fs=576000, prefilter=None, save_max=np.inf, save_folder='.',
+    def __init__(self, hydrophone=None, fs=576000, prefilter=None, save_folder='.',
                  convert=False, click_model_path=None, classifier=None, save_noise=False):
         """
         Process to save, filter and classify the clicks from SoundTrap HF detector
@@ -625,8 +625,6 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         prefilter: Filter object
             Prefilter to apply to the signal before passing it to the trigger. It is also applied to the stored clips.
             If set to None a band-pass Butterworth 4th order filter [100000, 150000] Hz will be used
-        save_max : int
-            Maximum number of clicks to save in a file
         save_folder : string or Path
             Folder where to save the click output
         classifier : classifier object
@@ -646,7 +644,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             self.prefilter = prefilter
             self.prefilter.fs = fs
 
-        self.save_max = save_max
+        self.save_max = 1e6  # Set it to a number so it does not save at the end
         self.save_folder = save_folder
         self.save_noise = save_noise
 
@@ -670,6 +668,18 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         self.columns.remove('id')
 
         self.fs = fs
+
+    def __setattr__(self, key, value):
+        """
+        If the sampling frequency of the sound is different than the one from the filters, update the filters
+        """
+        if key == 'fs':
+            self.prefilter.fs = value
+            if self.converter is not None:
+                self.converter.fs = value
+        elif key == 'save_folder':
+            value = pathlib.Path(value)
+        self.__dict__[key] = value
 
     def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None):
         """
@@ -702,11 +712,12 @@ class ClickDetectorSoundTrapHF(ClickDetector):
                                                            click['duration'] * 1e6 / self.fs, amplitude]
         clips_file = pd.DataFrame(params_matrix, columns=self.columns)
         clips_file['wave'] = clips['wave']
-        clips_file['datetime'] = clips.index
+        clips_file['datetime'] = clips.datetime
         clips_file['filename'] = clips.filename
         clips_file.start_sample = clips_file.start_sample.astype(np.int32)
-        self.clips = self.clips.append(clips_file)
-        if self.classify:
+        self.clips = self.clips.append(clips_file, ignore_index=True, sort=False)
+        if self.classifier is not None:
             self.clips = self.classifier.classify_matrix(self.clips)
 
+        self.save_clips()
         return self.clips

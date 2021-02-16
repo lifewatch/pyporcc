@@ -681,7 +681,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             value = pathlib.Path(value)
         self.__dict__[key] = value
 
-    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None):
+    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None, verbose=True):
         """
         Return the possible clips containing clicks
 
@@ -710,6 +710,15 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             else:
                 params_matrix[idx, 3:len(self.columns)] = [click['start_sample'], click['duration'],
                                                            click['duration'] * 1e6 / self.fs, amplitude]
+
+            if verbose:
+                fig, ax = plt.subplots(2, 1)
+                ax[0].plot(filtered_wave, label='Filtered signal')
+                ax[1].plot(click.wave, label='Original signal')
+                plt.legend()
+                plt.tight_layout()
+                plt.show()
+                plt.close()
         clips_file = pd.DataFrame(params_matrix, columns=self.columns)
         clips_file['wave'] = clips['wave']
         clips_file['datetime'] = clips.datetime

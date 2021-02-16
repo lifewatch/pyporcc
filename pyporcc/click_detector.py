@@ -644,7 +644,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             self.prefilter = prefilter
             self.prefilter.fs = fs
 
-        self.save_max = 1e6  # Set it to a number so it does not save at the end
+        self.save_max = np.inf  # Set it to a inf so it does not save at the end
         self.save_folder = save_folder
         self.save_noise = save_noise
 

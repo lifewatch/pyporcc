@@ -300,7 +300,7 @@ class ClickDetector:
             clips_block = self.classifier.classify_matrix(clips_block)
         return clips_block
 
-    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None):
+    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None, zip_mode=False):
         """
         Return the possible clips containing clicks
 
@@ -317,7 +317,11 @@ class ClickDetector:
             Otherwise it will be set up to 01/01/1900 0:0:0
         """
         # Open file
-        sound_file = sf.SoundFile(sound_file_path, 'r')
+        if zip_mode:
+            folder_zip_file = zipfile.ZipFile(sound_file_path.parent, 'r', allowZip64=True)
+            sound_file = sf.SoundFile(folder_zip_file.open(sound_file_path.name))
+        else:
+            sound_file = sf.SoundFile(sound_file_path, 'r')
 
         # Update the frequency
         self.fs = sound_file.samplerate
@@ -375,13 +379,15 @@ class ClickDetector:
             files_list = sorted(folder_path.glob('*.wav'))
 
         for file_name in tqdm(files_list, total=len(files_list), desc='folder'):
-            if file_name.suffix == '.wav':
-                # Get the wav
-                if zip_mode:
-                    wav_file = folder_path.open(file_name)
-                else:
+            # Get the wav
+            if zip_mode:
+                if file_name.split('.')[-1] == 'wav':
+                    wav_file = pathlib.Path(folder_path.filename).joinpath(file_name)
+                    self.detect_click_clips_file(wav_file, blocksize=blocksize, zip_mode=zip_mode)
+            else:
+                if file_name.suffix == '.wav':
                     wav_file = file_name
-                self.detect_click_clips_file(wav_file, blocksize=blocksize)
+                    self.detect_click_clips_file(wav_file, blocksize=blocksize, zip_mode=zip_mode)
 
         if self.save_max != np.inf:
             self.save_clips()
@@ -681,7 +687,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             value = pathlib.Path(value)
         self.__dict__[key] = value
 
-    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None, verbose=True):
+    def detect_click_clips_file(self, sound_file_path, blocksize=None, date=None, verbose=False, zip_mode=False):
         """
         Return the possible clips containing clicks
 
@@ -693,7 +699,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Date where the file starts. If no date it will be read from the file name.
             Otherwise it will be set up to 01/01/1900 0:0:0
         """
-        clips = self.hydrophone.read_HFclicks_file(sound_file_path)
+        clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
         params_matrix = np.zeros((len(clips), len(self.columns)))
         print('Calculating parameters and classifying clicks')
         self.fs = clips.iloc[0]['fs']

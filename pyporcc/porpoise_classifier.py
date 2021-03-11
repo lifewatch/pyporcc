@@ -12,15 +12,15 @@ __credits__ = "Clea Parcerisas"
 __email__ = "clea.parcerisas@vliz.be"
 __status__ = "Development"
 
-from pyporcc import utils
-
 import pickle
+
+import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.stats as stats
-import matplotlib.pyplot as plt
-
 from sklearn import metrics, linear_model, ensemble, svm, neighbors, pipeline
 from sklearn import preprocessing, feature_selection, model_selection, utils
+
+from pyporcc import utils
 
 
 class PorpoiseClassifier:
@@ -43,7 +43,7 @@ class PorpoiseClassifier:
             self.ind_vars = ['Q', 'duration', 'ratio', 'XC', 'CF', 'BW']
         else:
             self.ind_vars = ind_vars
-        if dep_var is None: 
+        if dep_var is None:
             self.dep_var = 'class'
         else:
             self.dep_var = dep_var
@@ -91,20 +91,20 @@ class PorpoiseClassifier:
         Dictionary with the name of the model as key and another dictionary as value
         with ind_vars, model, binary as keys and their respective representations in values
         (It also adds it to the property "models" of the class)
-        """    
+        """
         x = self.train_data[self.ind_vars]
         y = self.train_data[self.dep_var]
-        if binary: 
+        if binary:
             # Convert the classes in 0 (no porpoise) or 1 (porpoise)
             y = self.convert2binary(y)
 
         # If standarize is considered, append it to the pipeline steps
         steps = []
-        if standarize: 
+        if standarize:
             # Standarize the data
             scaler = preprocessing.StandardScaler()
             steps.append(('scaler', scaler))
-        
+
         # Some common parameters
         tol = 1e-3
         gamma = utils.fixes.loguniform(1e-4, 1000)
@@ -114,10 +114,10 @@ class PorpoiseClassifier:
         # Get the model
         if model_name == 'svc':
             # List all the possible parameters that want to be checked
-            kernel_list = ['poly', 'rbf'] 
+            kernel_list = ['poly', 'rbf']
             degree = stats.randint(1, 4)
             param_distr = {'degree': degree, 'C': c_values, 'gamma': gamma, 'kernel': kernel_list}
-            
+
             # Classifier with fixed values
             clf = svm.SVC(tol=tol, cache_size=500, probability=True, max_iter=500)
 
@@ -143,7 +143,7 @@ class PorpoiseClassifier:
             # Classifier with fixed values
             clf = neighbors.KNeighborsClassifier()
 
-        else: 
+        else:
             raise Exception('%s is not implemented!' % model_name)
 
         if feature_sel:
@@ -164,12 +164,12 @@ class PorpoiseClassifier:
 
         if feature_sel:
             ind_vars = model['feature_selection'].transform(self.test_data[self.ind_vars])
-        else: 
+        else:
             ind_vars = self.ind_vars
 
         print(model['classification'].best_estimator_)
         self.models[model_name] = {'ind_vars': ind_vars, 'model': model, 'binary': binary}
-        
+
         # Save the model as a pickle file! 
         pickle.dump(model, open('pyporcc/models/%s.pkl' % model_name, 'wb'))
         return self.models[model_name]
@@ -195,7 +195,7 @@ class PorpoiseClassifier:
         with ind_vars, model, binary as keys and their respective representations in values
         (It also adds it to the property "models" of the class)
         """
-        for model_name in model_list: 
+        for model_name in model_list:
             self.get_best_model(model_name, binary, standarize, feature_sel)
         return self.models
 
@@ -208,9 +208,9 @@ class PorpoiseClassifier:
         DataFrame with name, roc_auc, recall and aic as columns
         """
         results = pd.DataFrame(columns=['name', 'roc_auc', 'recall', 'aic'])
-        for model_name, model_item in self.models.items(): 
-            ind_vars = model_item['ind_vars']     
-            model = model_item['model']       
+        for model_name, model_item in self.models.items():
+            ind_vars = model_item['ind_vars']
+            model = model_item['model']
             y_test = self.test_data[self.dep_var]
             if model_item['binary']:
                 # Convert the classes in 0 (no porpoise) or 1 (porpoise)
@@ -225,9 +225,9 @@ class PorpoiseClassifier:
             recall = metrics.recall_score(y_test, y_pred)
             aic = utils.aic_score(y_test, y_prob, len(ind_vars))
             results.loc[results.size] = [model_name, roc_auc, recall, aic]
-        
+
         print(results)
-        return results  
+        return results
 
     def plot_roc_curves(self, porcc_al):
         """
@@ -267,8 +267,8 @@ class PorpoiseClassifier:
         """
         y_test = df[self.dep_var]
         for model_name, model_item in self.models.items():
-            ind_vars = model_item['ind_vars']     
-            model = model_item['model']  
+            ind_vars = model_item['ind_vars']
+            model = model_item['model']
             x_test = df[ind_vars]
             if model_item['binary']:
                 # Convert the classes in 0 (no porpoise) or 1 (porpoise)
@@ -276,7 +276,7 @@ class PorpoiseClassifier:
             y_prob = model.predict_proba(x_test)[:, 1]
             fpr, tpr, thresholds = metrics.roc_curve(y_test, y_prob)
             ax.plot(fpr, tpr, label=model_name)
-        
+
         porcc_al._plot_roc_curves(df, dep_var=self.dep_var, ax0=ax)
         ax.set_xlabel('False alarm rate')
         ax.set_ylabel('Hit rate')

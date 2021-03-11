@@ -12,18 +12,19 @@ __credits__ = "Clea Parcerisas"
 __email__ = "clea.parcerisas@vliz.be"
 __status__ = "Development"
 
-import numpy as np
 import numba as nb
+import numpy as np
 
 REF = 1.0
+
 
 @nb.jit
 def aic_score(y, y_prob, n_features):
     """
     Return the AIC score
     """
-    llk = np.sum(y*np.log(y_prob[:, 1]) + (1 - y)*np.log(y_prob[:, 0]))
-    aic = 2*n_features - 2*llk
+    llk = np.sum(y * np.log(y_prob[:, 1]) + (1 - y) * np.log(y_prob[:, 0]))
+    aic = 2 * n_features - 2 * llk
     return aic
 
 
@@ -76,7 +77,7 @@ def to_db(wave):
     -------
     wave in db
     """
-    return 10*np.log10(wave**2)
+    return 10 * np.log10(wave ** 2)
 
 
 def constrain(x, lower, upper):

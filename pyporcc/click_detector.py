@@ -21,10 +21,10 @@ import matplotlib.pyplot as plt
 import numba as nb
 import numpy as np
 import pandas as pd
+import pyhydrophone as pyhy
 import soundfile as sf
 from scipy import signal as sig
 from tqdm import tqdm
-import pyhydrophone as pyhy
 
 from pyporcc import click_converter as cc
 from pyporcc import utils
@@ -315,6 +315,8 @@ class ClickDetector:
         date : datetime object
             Date where the file starts. If no date it will be read from the file name.
             Otherwise it will be set up to 01/01/1900 0:0:0
+        zip_mode : boolean
+            Set to True if the files are zipped
         """
         # Open file
         if zip_mode:
@@ -341,7 +343,8 @@ class ClickDetector:
         if date is None:
             try:
                 date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
-            except:
+            except ValueError:
+                print('Setting date to 01/01/1900 because it was not found')
                 date = dt.datetime(1900, 1, 1, 0, 0, 0)
 
         # Read the file by blocks
@@ -646,7 +649,8 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         """
         if not isinstance(hydrophone, pyhy.SoundTrapHF):
             raise Exception('The hydrophone has to be a SoundTrap with the HF Click detector!')
-        super().__init__(hydrophone=hydrophone)
+        super().__init__(hydrophone=hydrophone, fs=fs, prefilter=prefilter, save_folder=save_folder, convert=convert,
+                         click_model_path=click_model_path, classifier=classifier, save_noise=save_noise)
 
     def __setattr__(self, key, value):
         """
@@ -668,9 +672,17 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         ----------
         sound_file_path : string or Path
             Where the file to be computed is stored
+        blocksize : int
+            Number of samples to process at a time, if None it will be the length of the file.
+            If the blocksize is too small (smaller than 1 period of the lowest frequency of the filter)
+            it will affect the results
         date : datetime object
             Date where the file starts. If no date it will be read from the file name.
             Otherwise it will be set up to 01/01/1900 0:0:0
+        verbose : boolean
+            Set to True to get all the plots from the detections
+        zip_mode : boolean
+            Set to True if the files are zipped
         """
         clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
         self.fs = clips.iloc[0]['fs']

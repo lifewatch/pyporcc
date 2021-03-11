@@ -383,11 +383,17 @@ class ClickDetector:
             if zip_mode:
                 if file_name.split('.')[-1] == 'wav':
                     wav_file = pathlib.Path(folder_path.filename).joinpath(file_name)
-                    self.detect_click_clips_file(wav_file, blocksize=blocksize, zip_mode=zip_mode)
+                    try:
+                        self.detect_click_clips_file(wav_file, blocksize=blocksize, zip_mode=zip_mode)
+                    except RuntimeError as e:
+                        print("%s is corrupted and has not been included to the analysis" % wav_file, e)
             else:
                 if file_name.suffix == '.wav':
                     wav_file = file_name
-                    self.detect_click_clips_file(wav_file, blocksize=blocksize, zip_mode=zip_mode)
+                    try:
+                        self.detect_click_clips_file(wav_file, blocksize=blocksize, zip_mode=zip_mode)
+                    except RuntimeError as e:
+                        print("%s is corrupted and has not been included to the analysis" % wav_file, e)
 
         if self.save_max != np.inf:
             self.save_clips()
@@ -699,14 +705,10 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Date where the file starts. If no date it will be read from the file name.
             Otherwise it will be set up to 01/01/1900 0:0:0
         """
-        try:
-            clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
-        except IOError as e:
-            print("%s is corrupted and has not been included to the analysis" % sound_file_path, e)
-            clips = pd.DataFrame()
+        clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
+        self.fs = clips.iloc[0]['fs']
         params_matrix = np.zeros((len(clips), len(self.columns)))
         print('Calculating parameters and classifying clicks')
-        self.fs = clips.iloc[0]['fs']
         for idx, click in clips.iterrows():
             filtered_wave = self.prefilter(click.wave)
             clip_upa = utils.to_upa(filtered_wave, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,

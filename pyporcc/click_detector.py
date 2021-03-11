@@ -699,7 +699,11 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Date where the file starts. If no date it will be read from the file name.
             Otherwise it will be set up to 01/01/1900 0:0:0
         """
-        clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
+        try:
+            clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
+        except IOError as e:
+            print("%s is corrupted and has not been included to the analysis" % sound_file_path, e)
+            clips = pd.DataFrame()
         params_matrix = np.zeros((len(clips), len(self.columns)))
         print('Calculating parameters and classifying clicks')
         self.fs = clips.iloc[0]['fs']

@@ -646,40 +646,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         """
         if not isinstance(hydrophone, pyhy.SoundTrapHF):
             raise Exception('The hydrophone has to be a SoundTrap with the HF Click detector!')
-        self.hydrophone = hydrophone
-
-        # Initialize the filters. Create them default if None is passed
-        if prefilter is None:
-            wn = [100000, 150000]
-            self.prefilter = Filter(filter_name='butter', order=4, frequencies=wn, filter_type='bandpass', fs=fs)
-        else:
-            self.prefilter = prefilter
-            self.prefilter.fs = fs
-
-        self.save_max = np.inf  # Set it to a inf so it does not save at the end
-        self.save_folder = save_folder
-        self.save_noise = save_noise
-
-        self.columns = ['id', 'datetime', 'filename', 'wave', 'start_sample', 'duration_samples',
-                        'duration_us', 'amplitude']
-        self.classifier = classifier
-        if classifier is not None:
-            if not self.check_classifier(classifier):
-                raise TypeError('This classifier does not have a function to classify clicks!')
-        if convert:
-            self.converter = cc.ClickConverter(click_model_path=click_model_path, fs=fs)
-            self.columns += self.converter.click_vars
-        else:
-            self.converter = None
-
-        self.saved_files = []
-
-        # DataFrame with all the clips
-        self.clips = pd.DataFrame(columns=self.columns)
-        self.clips = self.clips.set_index('id')
-        self.columns.remove('id')
-
-        self.fs = fs
+        super().__init__(hydrophone=hydrophone)
 
     def __setattr__(self, key, value):
         """

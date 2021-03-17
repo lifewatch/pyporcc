@@ -685,7 +685,8 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Set to True if the files are zipped
         """
         clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
-        self.fs = clips.iloc[0]['fs']
+        if len(clips) > 0:
+            self.fs = clips.iloc[0]['fs']
         params_matrix = np.zeros((len(clips), len(self.columns)))
         print('Calculating parameters and classifying clicks')
         for idx, click in clips.iterrows():

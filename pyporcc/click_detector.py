@@ -687,38 +687,38 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
         if len(clips) > 0:
             self.fs = clips.iloc[0]['fs']
-        params_matrix = np.zeros((len(clips), len(self.columns)))
-        print('Calculating parameters and classifying clicks')
-        for idx, click in clips.iterrows():
-            filtered_wave = self.prefilter(click.wave)
-            clip_upa = utils.to_upa(filtered_wave, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
-                                    self.hydrophone.Vpp)
-            amplitude = utils.amplitude_db(clip_upa)
-            if self.converter is not None:
-                q, duration, ratio, xc, cf, bw = self.converter.click_params(click.wave, nfft=512)
-                params_matrix[idx, 3:len(self.columns)] = [click['start_sample'], click['duration'],
-                                                           click['duration'] * 1e6 / self.fs,
-                                                           amplitude, q, duration, ratio, xc, cf, bw]
-            else:
-                params_matrix[idx, 3:len(self.columns)] = [click['start_sample'], click['duration'],
-                                                           click['duration'] * 1e6 / self.fs, amplitude]
+            params_matrix = np.zeros((len(clips), len(self.columns)))
+            print('Calculating parameters and classifying clicks')
+            for idx, click in clips.iterrows():
+                filtered_wave = self.prefilter(click.wave)
+                clip_upa = utils.to_upa(filtered_wave, self.hydrophone.sensitivity, self.hydrophone.preamp_gain,
+                                        self.hydrophone.Vpp)
+                amplitude = utils.amplitude_db(clip_upa)
+                if self.converter is not None:
+                    q, duration, ratio, xc, cf, bw = self.converter.click_params(click.wave, nfft=512)
+                    params_matrix[idx, 3:len(self.columns)] = [click['start_sample'], click['duration'],
+                                                               click['duration'] * 1e6 / self.fs,
+                                                               amplitude, q, duration, ratio, xc, cf, bw]
+                else:
+                    params_matrix[idx, 3:len(self.columns)] = [click['start_sample'], click['duration'],
+                                                               click['duration'] * 1e6 / self.fs, amplitude]
 
-            if verbose:
-                fig, ax = plt.subplots(2, 1)
-                ax[0].plot(filtered_wave, label='Filtered signal')
-                ax[1].plot(click.wave, label='Original signal')
-                plt.legend()
-                plt.tight_layout()
-                plt.show()
-                plt.close()
-        clips_file = pd.DataFrame(params_matrix, columns=self.columns)
-        clips_file['wave'] = clips['wave']
-        clips_file['datetime'] = clips.datetime
-        clips_file['filename'] = clips.filename
-        clips_file.start_sample = clips_file.start_sample.astype(np.int32)
-        self.clips = self.clips.append(clips_file, ignore_index=True, sort=False)
-        if self.classifier is not None:
-            self.clips = self.classifier.classify_matrix(self.clips)
+                if verbose:
+                    fig, ax = plt.subplots(2, 1)
+                    ax[0].plot(filtered_wave, label='Filtered signal')
+                    ax[1].plot(click.wave, label='Original signal')
+                    plt.legend()
+                    plt.tight_layout()
+                    plt.show()
+                    plt.close()
+            clips_file = pd.DataFrame(params_matrix, columns=self.columns)
+            clips_file['wave'] = clips['wave']
+            clips_file['datetime'] = clips.datetime
+            clips_file['filename'] = clips.filename
+            clips_file.start_sample = clips_file.start_sample.astype(np.int32)
+            self.clips = self.clips.append(clips_file, ignore_index=True, sort=False)
+            if self.classifier is not None:
+                self.clips = self.classifier.classify_matrix(self.clips)
 
-        self.save_clips()
-        return self.clips
+            self.save_clips()
+            return self.clips

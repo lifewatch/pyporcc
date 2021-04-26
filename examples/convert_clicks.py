@@ -1,6 +1,6 @@
 
 
-from pyporcc import click_detector
+from pyporcc import click_detector, click_converter
 
 import pyhydrophone as pyhy
 
@@ -9,7 +9,7 @@ import pyhydrophone as pyhy
 # CONFIG
 
 # Sound Files
-sound_folder_path = "//archive/other_platforms/soundtrap/2017/najaar2017_reefballs_Belwind/67416073.170809"
+sound_folder_path = "//archive/other_platforms/soundtrap/2017/Belwind/najaar2017_reefballs_Belwind"
 
 name = 'SoundTrap'
 model = 1
@@ -30,6 +30,6 @@ if __name__ == "__main__":
     Detect clicks on sound data
     """
     # Convert the sound clips to click and save
-    clicks_df = hydrophone.read_HFclicks(sound_folder_path)
-    converter = click_detector.ClickConverter(click_model_path)
+    clicks_df = hydrophone.read_HFfolder(sound_folder_path, zip_mode=True)
+    converter = click_converter.ClickConverter(click_model_path)
     clicks = converter.clicks_df(clicks_df, save_path=clicks_output_path)

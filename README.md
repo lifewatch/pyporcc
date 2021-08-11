@@ -71,3 +71,7 @@ Please note, the clicks PAMGuard's Click Classifier classified as porpoise click
 and ManualAsign fields. 
 
 The equivalent files in pickle extension are the mat structures saved in a faster-to-read format for python. 
+
+## Citation
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5179943.svg)](https://doi.org/10.5281/zenodo.5179943)
+

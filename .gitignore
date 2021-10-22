@@ -61,3 +61,7 @@ doc/_build/
 pyporcc.egg-info/
 
 *.pkl
+*.wav
+*.dwv
+*.bcl
+*.xml

@@ -34,7 +34,6 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
-tests/test_data/output
 
 # Sphinx documentation
 doc/_build/
@@ -61,7 +60,10 @@ doc/_build/
 pyporcc.egg-info/
 
 *.pkl
-*.wav
-*.dwv
-*.bcl
-*.xml
+tests/**/*.wav
+tests/**/*.dwv
+tests/**/*.bcl
+tests/**/*.xml
+tests/**/*.sqlite3
+tests/**/*.csv
+tests/**/*.h5

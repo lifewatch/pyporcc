@@ -356,6 +356,7 @@ class ClickDetector:
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
             self.add_click_clips(block_n * blocksize, date, blocksize, sound_file, clips)
 
+        self.save_clips()
         return self.clips
 
     def detect_click_clips_folder(self, folder_path, blocksize=None, zip_mode=False):

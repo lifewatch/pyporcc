@@ -1,76 +1,65 @@
 # PyPorCC
 
-PyPorCC is a package that allows the classification of Harbor Porpoises' clicks.
-There is implemented the algorithm PorCC, adapted to python from the paper: 
+PyPorCC is a package that allows the detection and classification of Harbor Porpoises' clicks.
+The detection of clicks in continuous files is a python adaptation of the PAMGuard click detector algorithm. 
+> Gillespie D, Gordon J, McHugh R, McLaren D, Mellinger DK, Redmond P, Thode A, Trinder P, Deng XY (2008) PAMGUARD: 
+>Semiautomated, open source software for real-time acoustic detection and localisation of cetaceans.
+> Proceedings of the Institute of Acoustics 30:54–62.
+
+The classification is done using the PorCC algorithm, adapted to python from the paper: 
 > Cosentino, M., Guarato, F., Tougaard, J., Nairn, D., Jackson, J. C., & Windmill, J. F. C. (2019). 
 > Porpoise click classifier (PorCC): A high-accuracy classifier to study harbour porpoises ( Phocoena phocoena ) in the wild . 
 > The Journal of the Acoustical Society of America, 145(6), 3427–3434. https://doi.org/10.1121/1.5110908
 
-And also other models can be trained. The implemented ones so far are: 
+Also other models can be trained. The implemented ones so far are: 
 * `svc`: Support Vector Machines
 * `lsvc`: Linear Support Vector Machines
 * `RandomForest`: Random Forest
 * `knn`: K-Nearest Neighbor
 
-And can be trained on DataFrames containing waves (clips) of possible clicks. 
+## Usage
+### Click detector
+The Click detector can be used in continuous wav files (with higher than 300 kHz sampling rate) or in the SoundTrap 
+HF output files (*.bcl + *.dwv). 
+ForSoundTrapHF files, you can create a ClickDetectorSoundTrapHF object with the necessary parameters and run it as: 
 
-The package also provides an adapted alternative to PAMGuard's click detector that using a filter and a trigger 
-function selects clips that can potentially be clicks (high enery in the right frequency band)
+```python 
+import pathlib
+import pyhydrophone as pyhy
+
+from pyporcc import ClickDetectorSoundTrapHF, ClickDetector, PorCC, Filter
+
+
+sound_folder = pathlib.Path("./../tests/test_data/soundtrap")
+save_folder = pathlib.Path('./../tests/test_data/output')
+
+# Hydrophone
+model = 'ST300HF'
+name = 'SoundTrap'
+serial_number = 67416073
+soundtrap = pyhy.soundtrap.SoundTrapHF(name=name, model=model, serial_number=serial_number)
+
+# Filters parameters
+lowcutfreq = 100e3              # Lowcut frequency
+highcutfreq = 160e3             # Highcut frequency
+
+# Define the filters
+pfilter = Filter(filter_name='butter', filter_type='bandpass', order=4,
+                                frequencies=[lowcutfreq, highcutfreq])
+dfilter = Filter(filter_name='butter', filter_type='high', order=4, frequencies=20000)
+classifier = PorCC(load_type='manual', config_file='default')
+
+cd = ClickDetectorSoundTrapHF(hydrophone=soundtrap, save_folder=save_folder, convert=True,
+                              classifier=classifier, prefilter=pfilter, save_noise=False)
+cd.detect_click_clips_folder(sound_folder, blocksize=60 * 576000)
+
+```
+For continuous data, just make sure you use the class ClickDetector object instead of a ClickDetectorSoundTrapHF!
+The rest of the code should be the same (except the hydrophone definition, which will depend on the instrument you use)
 
 ## Note
-
-This package is not yet ready to use! Some tests for the click detector have to be done still.
-
-## INFORMATION ABOUT PYTHON FILES
-- click_detector.py: read sound files and create click cuttings out of it
-- porcc: model class and PorCC algorithm class
-- propoise_classifier: other models that can be trained to classify clicks (not PorCC)
-
-### Examples:
-- detect_clicks: how to use the click detector algorithm 
-- create_model: how to train and save models from validated data. Examples for PorCC and other are provided
-- classify: how to use the classifiers if the models are already trained and stored
-
-
-
-## INFORMATION ABOUT THE DATA FILES CONTENT
-
-trainHQ_data.mat = Matlab structure with data to to develop the logistic regression model to classify high-quality harbour porpoise clicks (HQ) 
-Fields:
-- *id*: identification number
-- *date*: date and time when it was recorded in string format 
-- *wave*: signals as recorded in the first hydrophones it impinges 
-- *P*: whether the click was a HQ porpoise click (value 1) or high-frequency noise (value 0). 
-
-
-trainLQ_data.mat = Matlab structure with data to develop the logistic regression model to classify low-quality harbour porpoise clicks (LQ). 
-Fields:
-- *id*: identification number
-- *date*: date and time when it was recorded in string format 
-- *wave*: signals as recorded in the first hydrophones it impinges 
-- *P*: whether the click was a LQ porpoise click (value 1) or high-frequency noise (value 0)
-
-
-test_data.mat = Matlab structure with data to test the result of PorCC.
-Fields: 
-- *id*: identification number
-- *date*: date and time when it was recorded in string format 
-- *realdate*: date as dd-mmm-yyyy hh:mm:ss 
-- *startSample*: sample where the signal begins 
-- *wave*: signals as recorded in the first hydrophones it impinges 
-- *duration*: duration estimated as the 80% of the energy of the signal 
-- *CF*: centroid frequency 
-- *BW*: the -3dB bandwidth
-- *ratio*: ratio between the peak and centroid frequency
-- *XC*: maximum value of the cross-correlation coefficient carried out against a typical porpoise click, 
-- *Q*: defined as the RMS bandwidth divided the centroid frequency
-- *ManualAsign*: class to which the signals were manually assigned
-- *ClassifiedAs*: class assigned by PorCC
-
 Please note, the clicks PAMGuard's Click Classifier classified as porpoise clicks appear as 0 in both ClassifiedAs 
-and ManualAsign fields. 
-
-The equivalent files in pickle extension are the mat structures saved in a faster-to-read format for python. 
+and ManualAssign fields. 
 
 ## Citation
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5179943.svg)](https://doi.org/10.5281/zenodo.5179943)

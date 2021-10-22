@@ -35,7 +35,7 @@ defined as “any series of clicks separated by gradually or
 cyclically changing inter-click interval suggesting a unit during an echolocation event or a communication signal”
 
 """
-from pyporcc.click_detector import ClickDetector, Filter
-from pyporcc.click_converter import  Click, ClickConverter
+from pyporcc.click_detector import ClickDetector, ClickDetectorSoundTrapHF, Filter
+from pyporcc.click_converter import Click, ClickConverter
 from pyporcc.porpoise_classifier import PorpoiseClassifier
 from pyporcc.porcc import PorCCModel, PorCC

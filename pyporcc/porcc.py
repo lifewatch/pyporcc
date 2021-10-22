@@ -17,7 +17,6 @@ import itertools
 import pickle
 from importlib import resources
 
-import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -110,8 +109,8 @@ class PorCCModel:
         """
         config = configparser.ConfigParser().read(configfile_path)
 
-        logitcoef_hq = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(np.float)
-        logitcoef_lq = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(np.float)
+        logitcoef_hq = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(float)
+        logitcoef_lq = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(float)
 
         self.hq_params = np.array(config['MODEL']['hq_params'].split(','))
         self.lq_params = np.array(config['MODEL']['lq_params'].split(','))
@@ -205,20 +204,14 @@ class PorCCModel:
 
     def save(self, save_path):
         """
-        Save the current models in a file. Can be chosen to save it as pickle or joblib
+        Save the current models in a file. It will saved as a pickle
 
         Parameters
         ----------
         save_path : string
             Path where to save the models
         """
-        extension = save_path.split('.')[-1]
-        if extension == 'pkl':
-            pickle.dump(self, open(save_path, 'wb'))
-        elif extension == 'joblib':
-            joblib.dump(self, save_path)
-        else:
-            raise Exception('This extension is unknown!')
+        pickle.dump(self, open(save_path, 'wb'))
 
     def calculate_clicks_params(self, df_name, fs, click_model_path, save_path=None):
         """
@@ -292,8 +285,8 @@ class PorCC:
         config = configparser.ConfigParser()
         config.read(configfile_path)
 
-        hq_coef = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(np.float)
-        lq_coef = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(np.float)
+        hq_coef = np.array(config['MODEL']['logitCoefHQ'].split(',')).astype(float)
+        lq_coef = np.array(config['MODEL']['logitCoefLQ'].split(',')).astype(float)
 
         self.hq_mod = ManualLogit(hq_coef)
         self.lq_mod = ManualLogit(lq_coef)
@@ -552,7 +545,7 @@ class ManualLogit:
         x : np.array
             Array with the X coefficients to be predict the probability
         """
-        lower_bnd = np.log(np.finfo(np.float64).eps)
+        lower_bnd = np.log(np.finfo(float).eps)
         upper_bnd = -lower_bnd
         if len(x.shape) == 1:
             xb = (x * self.coef_[1:]).sum() + self.coef_[0]

@@ -200,7 +200,7 @@ class ClickDetector:
         csv_df = csv_df.drop(columns=['wave'])
         csv_df.to_csv(clips_filename_csv)
 
-        vlen_type = h5py.special_dtype(vlen=np.float32)
+        vlen_type = h5py.special_dtype(vlen=float)
         f = h5py.File(waves_filename_h5, 'w')
         f.create_dataset('/waves', data=self.clips.wave.values, dtype=vlen_type)
         f.close()
@@ -349,7 +349,7 @@ class ClickDetector:
 
         # Read the file by blocks
         for block_n, block in enumerate(tqdm(sound_file.blocks(blocksize=blocksize, always_2d=True),
-                                             total=sound_file.frames / blocksize, desc='file', leave=False)):
+                                             total=int(sound_file.frames / blocksize), desc='file', leave=False)):
             prefilter_sig, zi = self.prefilter(block[:, 0], zi=zi)
 
             # Read samples one by one, apply filter

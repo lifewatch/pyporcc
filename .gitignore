@@ -10,7 +10,7 @@ __pycache__/
 .Python
 env/
 venv*/
-build/
+docs/build/
 dist/
 eggs/
 .eggs/

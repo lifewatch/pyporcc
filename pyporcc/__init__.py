@@ -9,7 +9,7 @@ Detection of NBHF clicks of harbour porpoises using SoundTrap.
 
 These NBHF signals have comparable durations around 100
 μsec, high directionality, centre frequencies around 130 kHz, and
-source levels generally well below 200 dB re 1 μPa (Au 1993; Madsen
+source2 levels generally well below 200 dB re 1 μPa (Au 1993; Madsen
 et al. 2005; Villadsgaard et al. 2007; Kyhn et al. 2009). 
 
 Clicks were only selected when the signal-to-noise ratio (SNR), given by the ratio

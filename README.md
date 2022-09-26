@@ -8,7 +8,8 @@ The detection of clicks in continuous files is a python adaptation of the PAMGua
 
 The classification is done using the PorCC algorithm, adapted to python from the paper: 
 > Cosentino, M., Guarato, F., Tougaard, J., Nairn, D., Jackson, J. C., & Windmill, J. F. C. (2019). 
-> Porpoise click classifier (PorCC): A high-accuracy classifier to study harbour porpoises ( Phocoena phocoena ) in the wild . 
+> Porpoise click classifier (PorCC): A high-accuracy classifier to study harbour porpoises ( Phocoena phocoena ) 
+> in the wild. 
 > The Journal of the Acoustical Society of America, 145(6), 3427–3434. https://doi.org/10.1121/1.5110908
 
 Also other models can be trained. The implemented ones so far are: 
@@ -21,7 +22,7 @@ Also other models can be trained. The implemented ones so far are:
 ### Click detector
 The Click detector can be used in continuous wav files (with higher than 300 kHz sampling rate) or in the SoundTrap 
 HF output files (*.bcl + *.dwv). 
-ForSoundTrapHF files, you can create a ClickDetectorSoundTrapHF object with the necessary parameters and run it as: 
+For SoundTrapHF files, you can create a ClickDetectorSoundTrapHF object with the necessary parameters and run it as: 
 
 ```python 
 import pathlib

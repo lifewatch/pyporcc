@@ -40,5 +40,5 @@ class TestDetector(unittest.TestCase):
     def test_continous(self):
         self.cd_continous.detect_click_clips_folder(sound_folder_continuous, blocksize=60 * 576000)
 
-    # def test_soundtrap(self):
-    #     self.cd_soundtrap.detect_click_clips_folder(sound_folder_soundtrap, blocksize=60 * 576000)
+    def test_soundtrap(self):
+        self.cd_soundtrap.detect_click_clips_folder(sound_folder_soundtrap, blocksize=60 * 576000)

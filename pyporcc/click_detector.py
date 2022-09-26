@@ -342,7 +342,7 @@ class ClickDetector:
         # Get the initial date of the file
         if date is None:
             try:
-                date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name, utc=False)
+                date = self.hydrophone.get_name_datetime(pathlib.Path(sound_file.name).name)
             except ValueError:
                 print('Setting date to 01/01/1900 because it was not found')
                 date = dt.datetime(1900, 1, 1, 0, 0, 0)

@@ -139,6 +139,8 @@ class ClickDetector:
 
         self.fs = fs
 
+        self.split_number = 0
+
     def __setattr__(self, key, value):
         """
         If the sampling frequency of the sound is different than the one from the filters, update the filters 
@@ -172,16 +174,13 @@ class ClickDetector:
 
         return xi
 
-    def save_clips(self):
+    def save_clips(self, file_id):
         """
         Save the clips in a file
         """
-        clips_filename_h5 = self.save_folder.joinpath('%s_clips.h5' %
-                                                      self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
-        waves_filename_h5 = self.save_folder.joinpath('%s_waves.h5' %
-                                                      self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
-        clips_filename_csv = self.save_folder.joinpath('%s_clips.csv' %
-                                                       self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
+        clips_filename_h5 = self.save_folder.joinpath('%s_clips.h5' % file_id)
+        waves_filename_h5 = self.save_folder.joinpath('%s_waves.h5' % file_id)
+        clips_filename_csv = self.save_folder.joinpath('%s_clips.csv' % file_id)
 
         self.clips.filename = self.clips.filename.astype(str)
         self.clips.datetime = self.clips.datetime.astype(str)
@@ -234,7 +233,9 @@ class ClickDetector:
 
         # If longer than maximum, save it
         if len(self.clips) >= self.save_max:
-            self.save_clips()
+            half_file_name = pathlib.Path(sound_file.name).name[:-4] + '_' + str(self.split_number)
+            self.save_clips(file_id=half_file_name)
+            self.split_number += 1
 
     def clicks_block(self, signal, date, filename, start_sample_block, clips_list, verbose=False):
         """
@@ -315,6 +316,7 @@ class ClickDetector:
         zip_mode : boolean
             Set to True if the files are zipped
         """
+        self.split_number = 0
         # Open file
         if zip_mode:
             folder_zip_file = zipfile.ZipFile(sound_file_path.parent, 'r', allowZip64=True)
@@ -353,7 +355,7 @@ class ClickDetector:
             clips, click_on, n_on, n_off = self.triggerfilter.update_block(prefilter_sig, click_on, n_on, n_off)
             self.add_click_clips(block_n * blocksize, date, blocksize, sound_file, clips)
 
-        self.save_clips()
+        self.save_clips(file_id=sound_file_path.name[:-4])
         return self.clips
 
     def detect_click_clips_folder(self, folder_path, blocksize=None, zip_mode=False):
@@ -380,6 +382,7 @@ class ClickDetector:
             files_list = sorted(folder_path.glob('*.wav'))
 
         for file_name in tqdm(files_list, total=len(files_list), desc='folder'):
+            self.split_number = 0
             # Get the wav
             if zip_mode:
                 if file_name.split('.')[-1] == 'wav':
@@ -397,7 +400,7 @@ class ClickDetector:
                         print("%s is corrupted and has not been included to the analysis" % wav_file, e)
 
         if self.save_max != np.inf:
-            self.save_clips()
+            self.save_clips(file_id=folder_path.name)
 
         return self.clips
 
@@ -682,6 +685,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
         zip_mode : boolean
             Set to True if the files are zipped
         """
+        self.split_number = 0
         clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
         if len(clips) > 0:
             self.fs = clips.iloc[0]['fs']
@@ -718,5 +722,5 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             if self.classifier is not None:
                 self.clips = self.classifier.classify_matrix(self.clips)
 
-            self.save_clips()
+            self.save_clips(file_id=sound_file_path.name[:-4])
             return self.clips

@@ -176,8 +176,6 @@ class ClickDetector:
         """
         Save the clips in a file
         """
-        # clips_filename_parquet = self.save_folder.joinpath('%s_clips.parquet.gzip' %
-        #                                                 self.clips.datetime.iloc[0].strftime('%d%m%y_%H%M%S'))
         clips_filename_h5 = self.save_folder.joinpath('%s_clips.h5' %
                                                       self.clips.datetime.iloc[0].strftime('%y%m%d_%H%M%S'))
         waves_filename_h5 = self.save_folder.joinpath('%s_waves.h5' %
@@ -204,8 +202,7 @@ class ClickDetector:
         f = h5py.File(waves_filename_h5, 'w')
         f.create_dataset('/waves', data=self.clips.wave.values, dtype=vlen_type)
         f.close()
-        self.clips.drop(columns=['wave']).to_hdf(clips_filename_h5, key='clips', format='table')
-        # self.clips.to_parquet(clips_filename_parquet, compression='gzip')
+        self.clips.drop(columns=['wave']).to_hdf(clips_filename_h5, key='clips')
         self.clips.drop(index=self.clips.index, inplace=True)
         self.saved_files.append(clips_filename_h5)
 
@@ -233,7 +230,7 @@ class ClickDetector:
         # Filter the signal
         filtered_signal = self.dfilter(signal)
         clips_block = self.clicks_block(filtered_signal, date, sound_file.name, start_sample, clips_list)
-        self.clips = self.clips.append(clips_block, ignore_index=True, sort=False)
+        self.clips = pd.concat([self.clips, clips_block], ignore_index=True, sort=False)
 
         # If longer than maximum, save it
         if len(self.clips) >= self.save_max:
@@ -717,7 +714,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             clips_file['datetime'] = clips.datetime
             clips_file['filename'] = clips.filename
             clips_file.start_sample = clips_file.start_sample.astype(np.int32)
-            self.clips = self.clips.append(clips_file, ignore_index=True, sort=False)
+            self.clips = pd.concat([self.clips, clips_file], ignore_index=True, sort=False)
             if self.classifier is not None:
                 self.clips = self.classifier.classify_matrix(self.clips)
 

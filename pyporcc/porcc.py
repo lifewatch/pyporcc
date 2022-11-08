@@ -264,7 +264,7 @@ class PorCC:
 
         self.load_type = load_type
         if load_type == 'manual':
-            if kwargs['config_file'] is 'default':
+            if kwargs['config_file'] == 'default':
                 with resources.path('pyporcc.models', 'log_models.ini') as config_path:
                     self.manual_models(config_path)
             else:

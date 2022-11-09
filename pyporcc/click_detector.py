@@ -399,9 +399,6 @@ class ClickDetector:
                     except RuntimeError as e:
                         print("%s is corrupted and has not been included to the analysis" % wav_file, e)
 
-        if self.save_max != np.inf:
-            self.save_clips(file_id=folder_path.name)
-
         return self.clips
 
     def classify_all_saved_clips(self, classifier=None):

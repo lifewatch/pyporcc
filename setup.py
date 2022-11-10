@@ -1,7 +1,7 @@
 import setuptools
 
 setuptools.setup(name='pyporcc',
-                 version='0.1.2',
+                 version='0.1.3',
                  description='Adapted PorCC to python',
                  url='https://github.com/cparcerisas/pyporcc.git',
                  author='Clea Parcerisas',

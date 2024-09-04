@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "pyporcc"
+version = "0.1.0"
+description = ""
+authors = ["Clea Parcerisas"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.12.0"
+pyhydrophone = "^0.1.7"
+pandas = "^2.2.2"
+numba = "^0.60.0"
+scipy = ">=1.10.0"
+h5py = "^3.11.0"
+tqdm = "^4.66.5"
+scikit-learn = "^1.5.1"
+matplotlib = "^3.9.2"
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

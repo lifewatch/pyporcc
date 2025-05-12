@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "pyporcc"
-version = "0.3.0"
+version = "0.3.1"
 description = ""
 authors = ["Clea Parcerisas"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12.0"
-pyhydrophone = ">0.1.7"
+pyhydrophone = "^0.1.7"
 pandas = "^2.2.2"
 numba = ">=0.57.0,<0.58.0"
 scipy = ">=1.10.0"

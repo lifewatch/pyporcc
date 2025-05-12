@@ -39,6 +39,8 @@ class ClickConverter:
             with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
                 print('Setting the click model path to default...')
                 self.click_model_path = click_model_path
+        else:
+            self.click_model_path = click_model_path
         self.click_model, self.fs_model = sf.read(click_model_path)
         self.fs = fs
 

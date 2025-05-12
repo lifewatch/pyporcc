@@ -19,6 +19,19 @@ serial_number = 67416073
 soundtrap = pyhy.soundtrap.SoundTrap(name=name, model=model, serial_number=serial_number)
 soundtraphf = pyhy.soundtrap.SoundTrapHF(name=name, model=model, serial_number=serial_number)
 
+
+# Hydrophone
+model = 'ST300HF'
+name = 'SoundTrap'
+serial_number = 5293
+# Comment the one that corresponds to your instrument
+soundtraphf_freq_cal = pyhy.soundtrap.SoundTrapHF(name=name,
+                                                  model=model,
+                                                  serial_number=serial_number,
+                                                  calibration_file=pathlib.Path('./../tests/test_data/ST5293.csv'),
+                                                  sep=';',
+                                                  val_col_id=2)
+
 # Filters parameters
 lowcutfreq = 100e3              # Lowcut frequency
 highcutfreq = 160e3             # Highcut frequency

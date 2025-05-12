@@ -8,6 +8,8 @@ import soundfile as sf
 from scipy import interpolate
 from scipy import signal as sig
 
+from pyporcc import data
+
 
 class ClickConverter:
     def __init__(self, fs, click_model_path=None, click_vars=None):
@@ -22,7 +24,7 @@ class ClickConverter:
             List of the output parameters to compute for each click
         """
         if click_model_path is None:
-            with resources.path('pyporcc.data', 'standard_click.wav') as click_model_path:
+            with resources.files(data).joinpath('standard_click.wav') as click_model_path:
                 print('Setting the click model path to default...')
                 self.click_model_path = click_model_path
         else:

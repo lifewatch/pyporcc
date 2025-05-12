@@ -9,10 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn import metrics, linear_model, model_selection
 
-from pyporcc import click_converter, utils
-
-pd.plotting.register_matplotlib_converters()
-plt.style.use('ggplot')
+from pyporcc import click_converter, utils, models
 
 
 class PorCCModel:
@@ -252,7 +249,7 @@ class PorCC:
         self.load_type = load_type
         if load_type == 'manual':
             if kwargs['config_file'] == 'default':
-                with resources.path('pyporcc.models', 'log_models.ini') as config_path:
+                with resources.files(models).joinpath('log_models.ini') as config_path:
                     self.manual_models(config_path)
             else:
                 self.manual_models(kwargs['config_file'])

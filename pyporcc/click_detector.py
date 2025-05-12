@@ -216,7 +216,9 @@ class ClickDetector:
         # Filter the signal
         filtered_signal = self.dfilter(signal)
         clips_block = self.clicks_block(filtered_signal, date, sound_file.name, start_sample, clips_list)
-        self.clips = pd.concat([self.clips, clips_block], ignore_index=True, sort=False)
+        clips_block = clips_block.dropna(how='all')
+        if len(clips_block) > 0:
+            self.clips = pd.concat([self.clips, clips_block], ignore_index=True, sort=False)
 
         # If longer than maximum, save it
         if len(self.clips) >= self.save_max:
@@ -702,7 +704,9 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             clips_file['datetime'] = clips.datetime
             clips_file['filename'] = clips.filename
             clips_file.start_sample = clips_file.start_sample.astype(np.int32)
-            self.clips = pd.concat([self.clips, clips_file], ignore_index=True, sort=False)
+            clips_file = clips_file.dropna(how='all')
+            if len(clips_file) > 0:
+                self.clips = pd.concat([self.clips, clips_file], ignore_index=True, sort=False)
             if self.classifier is not None:
                 self.clips = self.classifier.classify_matrix(self.clips)
 

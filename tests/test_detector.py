@@ -7,9 +7,9 @@ from pyporcc import ClickDetectorSoundTrapHF, ClickDetector, PorCC, Filter
 
 # PAMGuard comparison
 pamguard_output = pathlib.Path('./tests/test_data/clicks_test_pyporcc.sqlite3')
-sound_folder_soundtrap = pathlib.Path("./../tests/test_data/soundtrap")
-sound_folder_continuous = pathlib.Path("./../tests/test_data/continuous")
-save_folder = pathlib.Path('./../tests/test_data/output')
+sound_folder_soundtrap = pathlib.Path("./tests/test_data/soundtrap")
+sound_folder_continuous = pathlib.Path("./tests/test_data/continuous")
+save_folder = pathlib.Path('./tests/test_data/output')
 
 # Hydrophone
 model = 'ST300HF'
@@ -28,7 +28,7 @@ serial_number = 5293
 soundtraphf_freq_cal = pyhy.soundtrap.SoundTrapHF(name=name,
                                                   model=model,
                                                   serial_number=serial_number,
-                                                  calibration_file=pathlib.Path('./../tests/test_data/ST5293.csv'),
+                                                  calibration_file=pathlib.Path('./tests/test_data/ST5293.csv'),
                                                   sep=';',
                                                   val_col_id=2)
 

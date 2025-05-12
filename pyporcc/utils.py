@@ -1,24 +1,12 @@
 #!/usr/bin/python
-"""
-Module : utils.py
-Authors : Clea Parcerisas
-Institution : VLIZ (Vlaams Instituut voor de Zee)
-Last Accessed : 9/23/2020
-"""
-
-__author__ = "Clea Parcerisas"
-__version__ = "0.1"
-__credits__ = "Clea Parcerisas"
-__email__ = "clea.parcerisas@vliz.be"
-__status__ = "Development"
-
 import numba as nb
 import numpy as np
+
 
 REF = 1.0
 
 
-@nb.jit
+@nb.jit(nopython=True)
 def aic_score(y, y_prob, n_features):
     """
     Return the AIC score
@@ -28,7 +16,7 @@ def aic_score(y, y_prob, n_features):
     return aic
 
 
-@nb.jit
+@nb.jit(nopython=True)
 def to_upa(wave, sensitivity, preamp_gain, Vpp):
     """
     Return the wave in db
@@ -49,7 +37,7 @@ def to_upa(wave, sensitivity, preamp_gain, Vpp):
     return wave * gain_upa
 
 
-@nb.jit
+@nb.jit(nopython=True)
 def amplitude_db(clip):
     """
     Return the amplitude of the clip
@@ -64,7 +52,7 @@ def amplitude_db(clip):
     return to_db(np.max(np.abs(clip)))
 
 
-@nb.jit
+@nb.jit(nopython=True)
 def to_db(wave):
     """
     Convert the wave to db

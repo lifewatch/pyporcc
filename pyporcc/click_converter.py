@@ -1,17 +1,3 @@
-#!/usr/bin/python
-"""
-Module : click_converter.py
-Authors : Clea Parcerisas
-Institution : VLIZ (Vlaams Instituut voor de Zee)
-Last Accessed : 9/23/2020
-"""
-
-__author__ = "Clea Parcerisas"
-__version__ = "0.1"
-__credits__ = "Clea Parcerisas"
-__email__ = "clea.parcerisas@vliz.be"
-__status__ = "Development"
-
 import sys
 from importlib import resources
 

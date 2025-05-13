@@ -610,7 +610,7 @@ class Filter:
 
 class ClickDetectorSoundTrapHF(ClickDetector):
     def __init__(self, hydrophone=None, fs=576000, prefilter=None, save_folder='.',
-                 convert=False, click_model_path=None, classifier=None, save_noise=False):
+                 convert=False, click_model_path=None, classifier=None, save_noise=False, click_len=None):
         """
         Process to save, filter and classify the clicks from SoundTrap HF detector
         Trigger decision
@@ -633,9 +633,12 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Classifier used to classify the snippets. Needs to have a classify_click function
         save_noise : bool
             Set to True if you want to save the noise clips as well
+        click_len : int
+            Length of the click. Should be the sum of the parameters PREDET and POSTDET in the XML file of ST
         """
         if not isinstance(hydrophone, pyhy.SoundTrapHF):
             raise Exception('The hydrophone has to be a SoundTrap with the HF Click detector!')
+        self.click_len = click_len
         super().__init__(hydrophone=hydrophone, fs=fs, prefilter=prefilter, save_folder=save_folder, convert=convert,
                          click_model_path=click_model_path, classifier=classifier, save_noise=save_noise)
 
@@ -672,7 +675,7 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Set to True if the files are zipped
         """
         self.split_number = 0
-        clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode)
+        clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode, click_len=self.click_len)
         if len(clips) > 0:
             self.fs = clips.iloc[0]['fs']
             params_matrix = np.zeros((len(clips), len(self.columns)))

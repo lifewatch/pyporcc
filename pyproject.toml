@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pyporcc"
-version = "0.3.3"
+version = "0.3.4"
 description = ""
 authors = ["Clea Parcerisas"]
 readme = "README.md"

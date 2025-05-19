@@ -675,7 +675,10 @@ class ClickDetectorSoundTrapHF(ClickDetector):
             Set to True if the files are zipped
         """
         self.split_number = 0
-        clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode, click_len=self.click_len)
+        try:
+            clips = self.hydrophone.read_HFclicks_file(sound_file_path, zip_mode=zip_mode, click_len=self.click_len)
+        except:
+            raise RuntimeError('Error reading the file %s' % sound_file_path)
         if len(clips) > 0:
             self.fs = clips.iloc[0]['fs']
             params_matrix = np.zeros((len(clips), len(self.columns)))
